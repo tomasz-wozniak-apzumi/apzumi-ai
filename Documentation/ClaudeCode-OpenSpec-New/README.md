@@ -196,14 +196,25 @@ issues are cleared. Two practices keep it honest:
 node scripts/apzumi-validate.mjs
 ```
 
-  It fails when a change has `tasks.md` without a passing review; when an
-  archived change's Regression rows never reached a living suite or its
-  decisions never became ADRs; when a platform group is missing its
-  `[E2E automation]` task or has it out of order; when a scenario is missing
-  its `Regression`/`One-off` type; when a UI-facing spec has no confirmed
-  Figma link; when suite IDs collide, use the wrong capability prefix, or
-  outlive the capability's `spec.md`; and when the ADR log has a numbering gap
-  or an index row that disagrees with the ADR's own status. `openspec validate
+  It fails when a change has `tasks.md` without a passing review, or a passing
+  review over a `tests.md` nobody signed; when an archived change's Regression
+  rows never reached a living suite or its decisions never became ADRs; when a
+  platform group is missing its `[E2E automation]` task or has it out of order;
+  when a scenario is missing its `Regression`/`One-off` type; when a UI-facing
+  spec has no confirmed Figma link; when suite IDs collide, use the wrong
+  capability prefix, or outlive the capability's `spec.md`; and when the ADR log
+  has a numbering gap or an index row that disagrees with the ADR's own status.
+
+  It also fails on the QA half of `tests.md`, the part a human owns: a
+  half-filled approval, an approval naming a tool rather than a person, an
+  `Automation` or `Decision` value that is not one of the allowed ones, a
+  per-platform `Decision` that does not cover the platforms its row claims, a
+  platform name absent from CONVENTIONS.md, and a signed file still carrying an
+  undecided Regression row. Then the one that closes the loop: an
+  `[E2E automation]` task must cover exactly the rows a tester assigned to that
+  platform's framework. Generating a test for a row marked `manual` overrides a
+  human decision; not generating one a tester asked for loses coverage
+  silently. Nothing linked those two before. `openspec validate
   --all` covers specs and changes; this covers everything OpenSpec has no
   concept of.
 
@@ -220,9 +231,14 @@ scripts/apzumi-validate.mjs` works in any repo that already has Node for the
 OpenSpec CLI. Flags: `--root <path>` validates a different checkout;
 `--quiet` suppresses warnings and the OK line, for hooks;
 `--no-archive-check` skips the "was this archived change ever synced?" pass
-while adopting the workflow in a repo with existing archives; and
+while adopting the workflow in a repo with existing archives;
 `--ui-platforms` / `--no-e2e-platforms` override the defaults for which
-platforms need a Figma link and which have nothing to automate.
+platforms need a Figma link and which have nothing to automate; and
+`--results-dir <path>` turns on the "was it ever run?" pass, which fails an
+archived change whose scenarios a tester assigned to a framework when no
+committed run under that path mentions their suite ids. That one is opt-in
+because the link is by test name, so it only means anything once a project
+commits its results.
 
 ## Benefiting from OpenSpec upgrades
 
