@@ -106,6 +106,15 @@ does not exist, this is why: they are on the `core` profile.
 - [ ] Confirm `.claude/skills/apzumi-sync-knowledge/SKILL.md` is present. It
       updates the living regression suite and ADR log, and deliberately does
       not touch OpenSpec's own archive workflow (step 5 covers when to run it).
+- [ ] Confirm `.claude/skills/apzumi-verify-automation/SKILL.md` is present,
+      together with `apzumi-failure-triage` and `apzumi-test-maintainer`. This
+      is the step the schema does not cover: the schema stops at apply, having
+      proved the generated tests fail, and this is what a tester runs
+      afterwards against a build that works. It must run from a workspace that
+      does **not** contain the product code — see the note under
+      `## Connected Implementation Repositories` in CONVENTIONS.md. That
+      blindness is the point: it acts after the implementation exists, which is
+      the only moment when fitting a test to the code is possible.
 
 ## 4. Validation
 
@@ -198,11 +207,16 @@ there is no automatic pull. When the template ships a new version:
    - `openspec/schemas/apzumi-sdd/` — the workflow itself
    - `scripts/apzumi-validate.mjs` — the conventions checker
    - `.claude/skills/apzumi-sync-knowledge/` — writes the living suite and ADRs
+   - `.claude/skills/apzumi-verify-automation/` — runs the generated tests
+     against a real build, and repairs what a tester flags
    - `.claude/agents/apzumi-openspec-reviewer.md`,
      `.claude/agents/apzumi-design-test-scenarios.md` and
      `.claude/agents/apzumi-generate-test-code.md` — the review gate, the
      scenario designer and the E2E generator, all three delegated to by name
      from the schema
+   - `.claude/agents/apzumi-failure-triage.md` and
+     `.claude/agents/apzumi-test-maintainer.md` — delegated to by name from
+     `apzumi-verify-automation`, so they travel with it
    - `.github/workflows/openspec-validate.yml` — if you have not customised it
 2. Re-validate:
 

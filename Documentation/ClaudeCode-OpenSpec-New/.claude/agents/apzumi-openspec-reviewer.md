@@ -32,6 +32,31 @@ Check specifically:
   every row's Regression/One-off Type hold up — flag a `One-off` tag on
   anything that actually asserts durable behaviour, since only `Regression`
   rows are merged into the permanent suite and a wrong tag silently drops it.
+- Tests, the part that decides whether a row is worth having. These are the
+  defects that survive a formally valid file:
+  - **An expectation the specs do not promise.** An `Expected Result` no
+    requirement supports is the most expensive thing in the file: it reads as
+    a fact until someone checks, and the test built from it fails against a
+    correct implementation. A row carrying `[req: —]` is declaring exactly
+    this and asking for a decision — say whether the spec should be extended
+    or the row dropped, rather than letting it pass unremarked.
+  - **A row that cannot fail.** Ask, per row, what defect it catches. "The
+    page loads", "no error is shown", "it works" pass against a product that
+    did nothing. So does a row resting on a fixture that does not contain the
+    case it needs — that one looks rigorous and proves nothing, and it is the
+    hardest to spot because the file itself looks fine.
+  - **Duplicates.** Two rows asserting the same thing in different words are
+    one row, and both cost review time forever.
+  - **A recommendation nobody can act on.** `automation_candidate` on a row no
+    framework in CONVENTIONS.md can execute, or `needs_human_decision` with no
+    stated blocker, leaves the tester with a label instead of a question.
+  - **A requirement with no row at all** — the gap that is invisible in the
+    file, because absence has nothing to look at.
+- The QA gate: does `tests.md` carry an approval, and is every `Regression`
+  row decided? You cannot record `Verdict: PASS` while either is missing —
+  implementation would start on scenarios nobody signed. Never fill those
+  fields in yourself, and never treat their absence as a formality; you are
+  read-only and this is the reason it matters.
 - Design archival readiness: is each block under `## Decisions & Trade-offs`
   self-contained and titled well enough to become a standalone ADR when the
   change is synced (per openspec/decisions/README.md)? Flag a block that only makes sense
