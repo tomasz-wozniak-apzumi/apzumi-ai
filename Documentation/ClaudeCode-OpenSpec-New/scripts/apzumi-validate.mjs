@@ -38,6 +38,31 @@ const stripComments = (text) => text.replace(/<!--[\s\S]*?-->/g, '');
  * A header is the row immediately above a `|---|` separator, so it is removed
  * when the separator is reached rather than guessed at by content.
  */
+/**
+ * Index of a named column in the first table found in `text`, or -1.
+ *
+ * Callers used to read Type as `cells[cells.length - 1]`, which silently
+ * became a different column the moment a table grew one. Locating it by its
+ * header keeps a table extensible: a project may add columns after Type
+ * without every check quietly starting to validate the wrong cell.
+ */
+function columnIndex(text, name) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  const wanted = name.toLowerCase();
+  for (let i = 0; i < lines.length - 1; i++) {
+    const head = lines[i];
+    const sep = lines[i + 1];
+    if (!head.startsWith('|') || !head.endsWith('|')) continue;
+    if (!sep.startsWith('|') || !sep.endsWith('|')) continue;
+    const sepCells = sep.slice(1, -1).split('|').map((c) => c.trim());
+    if (!sepCells.length || !sepCells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+    const cols = head.slice(1, -1).split('|').map((c) => c.trim().toLowerCase());
+    const idx = cols.indexOf(wanted);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
 function tableRows(text) {
   const rows = [];
   let prevWasRow = false;
@@ -157,10 +182,16 @@ function checkChangeTests(root) {
 
     const seen = new Set();
     for (const [cap, body] of caps) {
+      const typeIdx = columnIndex(body, 'Type');
+      if (typeIdx === -1 && tableRows(body).length) {
+        error(where, `[${cap}] table has no "Type" column header — it is located ` +
+          'by name, so the header row must spell it exactly');
+        continue;
+      }
       for (const cells of tableRows(body)) {
-        if (cells.length < 5) {
-          error(where, `[${cap}] row has ${cells.length} columns, expected 5 ` +
-            `(#, Scenario, Steps, Expected Result, Type): ${cells.slice(0, 2).join(' | ')}`);
+        if (cells.length <= typeIdx) {
+          error(where, `[${cap}] row has ${cells.length} columns but Type is column ` +
+            `${typeIdx + 1}: ${cells.slice(0, 2).join(' | ')}`);
           continue;
         }
         const tid = cells[0].replace(/`/g, '').trim();
@@ -168,7 +199,7 @@ function checkChangeTests(root) {
           error(where, `[${cap}] scenario id "${tid}" is not T<n> — the sync records it ` +
             'as the suite row\'s Origin, so a malformed id breaks traceability');
         }
-        const type = cells[cells.length - 1];
+        const type = cells[typeIdx];
         if (type !== 'Regression' && type !== 'One-off') {
           error(where, `[${cap}] ${tid} has Type "${type}", expected "Regression" or "One-off"`);
         }
@@ -286,8 +317,10 @@ function checkE2eFirst(root, exemptPlatforms) {
     let regressionRows = 0;
     for (const [k, body] of Object.entries(sections(stripComments(readText(testsPath))))) {
       if (!k || k === 'Retired scenarios') continue;
+      const typeIdx = columnIndex(body, 'Type');
+      if (typeIdx === -1) continue;
       for (const cells of tableRows(body)) {
-        if (cells.length >= 5 && cells[cells.length - 1] === 'Regression') regressionRows++;
+        if (cells.length > typeIdx && cells[typeIdx] === 'Regression') regressionRows++;
       }
     }
     if (!regressionRows) continue;
