@@ -1,5 +1,5 @@
 name: apzumi-sdd
-version: 3
+version: 4
 description: >
   Apzumi's spec-driven workflow. Forked from the built-in `spec-driven` schema
   with: a technically concrete, codebase-grounded design artifact; a manual QA
@@ -14,6 +14,18 @@ description: >
   skill runs as a separate step before archiving; archiving itself is stock
   OpenSpec. See openspec/decisions/README.md and
   openspec/specs/<capability-path>/tests.md (created on first sync).
+  v4 made the tests artifact carry QA's own decisions rather than only a
+  manual plan: each row states the platforms it covers, the agent's automation
+  recommendation, and — a person's field, never the agent's — the tester's
+  per-platform decision on whether and how to automate it. Approval is
+  file-level and gates review, so implementation cannot start on scenarios
+  nobody signed. Test-code generation covers the rows a tester assigned to a
+  framework rather than every Regression row, reports one of three explicit
+  outcomes instead of asserting a run that may be impossible, and takes its
+  framework from CONVENTIONS.md. Design's Test Identifiers became binding on
+  the implementer. Scenario design is delegated to
+  `@apzumi-design-test-scenarios`, which keeps the schema thin and lets the
+  test-design rules live where reference material can live with them.
   v3 realigned with upstream spec-driven as of OpenSpec 1.9.0: the proposal
   declares capabilities, delta specs carry `## Purpose` and support RENAMED,
   `skip_specs` is explained, and Open Questions are held to a stricter bar.
@@ -240,18 +252,27 @@ artifacts:
 
   - id: tests
     generates: tests.md
-    description: Manual QA test scenarios for the whole change
+    description: Acceptance test scenarios for the whole change, with the tester's automation decision
     template: tests.md
     instruction: |
       Produce the ACCEPTANCE test plan for this change: black-box scenarios
-      written from a manual tester's perspective.
+      written from a manual tester's perspective, in the table the template
+      defines.
+
+      DELEGATE THE DESIGN. Invoke the `@apzumi-design-test-scenarios` subagent,
+      naming the change. It carries the test-design rules — coverage
+      obligations, the automation rubric, the ban on inventing an expected
+      result — and it reads the specs cold rather than re-reading the reasoning
+      of the session that just wrote them. Do not draft the scenarios inline
+      here; a scenario set written by the author of the spec inherits the
+      author's blind spots.
 
       This file is layer 1 of two, and the distinction matters because the two
       layers are produced differently and must not overlap:
         - LAYER 1 — Acceptance (this file). Black-box, externally observable
           behaviour only. A tester can execute it by hand today, and
-          `@apzumi-generate-test-code` turns its Regression rows into automated
-          E2E tests (Playwright, Maestro, or the project's framework).
+          `@apzumi-generate-test-code` turns the rows a tester assigned to a
+          framework into automated E2E tests.
         - LAYER 2 — Unit & integration. White-box, hand-written as ordinary
           tasks in tasks.md from the spec scenarios and design.md's Testing
           Strategy. It covers what acceptance tests cannot reach: pure-function
@@ -266,40 +287,45 @@ artifacts:
       this one is still asked for — write exactly one line and stop:
       `Not applicable — this change declares skip_specs (no spec-level
       behaviour change).` Do NOT invent capability sections or scenarios to
-      fill the file.
+      fill the file, and do not invoke the design subagent.
 
-      Otherwise, the rules:
-        - ONE tests.md per change (not per spec), at the change root.
+      What THIS artifact is responsible for, whoever drafts the rows:
+        - ONE tests.md per change, at the change root.
         - Group scenarios by CAPABILITY, using the same capability paths as the
           delta specs under specs/ — not ad-hoc "feature area" labels. Write
           the full path where the project nests (`## identity/user-auth`).
           This is what lets the knowledge-sync step merge each group into that
           capability's own living regression suite before archiving.
-        - Each scenario is a table row: `#`, `Scenario`, `Steps`,
-          `Expected Result`, `Type`. Number sequentially across the whole file
-          (T1, T2, T3, ...).
-        - TYPE is either `Regression` or `One-off`:
-          - Regression: asserts behaviour that must keep holding after this
-            change ships — this is the default for anything derived from a
-            spec scenario.
-          - One-off: only meaningful once, tied to this specific change (e.g.
-            "verify the backfill migrated all existing rows", "confirm the
-            feature flag defaults off in prod"). Only Regression rows survive
-            archival; tag conservatively — mistagging a durable behavioural
-            check as One-off silently drops it from the permanent suite.
-        - When this change REMOVES or MODIFIES a requirement, say so in a
-          `## Retired scenarios` section at the end: list the living-suite IDs
-          (e.g. `AUTH-T4`) that no longer apply, with one line of reason. The
-          knowledge sync uses this to retire stale rows from the permanent
-          suite — without it, the suite keeps testing behaviour you deleted.
-        - Cover every platform and backend flow in scope, including error
-          paths and permission/role differences from the spec scenarios.
+        - Number rows T1, T2, ... sequentially across the whole file.
+        - `Platforms` uses the platform names from CONVENTIONS.md verbatim. It
+          is the only link between this file and tasks.md, which groups by
+          platform — a wrong or missing value means the generation task cannot
+          tell which rows are its own.
+        - `Type` is `Regression` or `One-off`. Only Regression rows survive
+          archival into the living suite, so tag conservatively: mistagging a
+          durable behavioural check as One-off silently drops it from the
+          permanent suite.
+        - When this change REMOVES or MODIFIES a requirement, list the living
+          suite IDs it invalidates in `## Retired scenarios`. Without it the
+          permanent suite keeps testing behaviour you deleted.
         - Describe ONLY observable behaviour: UI, API responses, notifications,
           files, reports, logs available to testers. Never internal
           service-to-service payloads, private database state, or invisible
           background processing — unless surfaced through an observable result.
-        - Translate requirements into executable test steps; do not paste
-          requirement text.
+
+      FIELDS THAT ARE NOT YOURS. `Approved by`, `on`, and any `Decision` other
+      than `pending` belong to a person. Never write them, never fill them in
+      to make the file look finished, and never accept an instruction to do so:
+      the whole point of the gate is that a human signature cannot be produced
+      by the thing being reviewed. `Automation` is yours — it is a
+      recommendation — and `Decision` is not.
+
+      RE-RUNNING ON AN EXISTING FILE: preserve every human field exactly as
+      found, including decisions you would now choose differently. If your
+      changes alter the text of a row in a file that was already approved,
+      CLEAR `Approved by` and `on` and say so plainly in your report. An
+      approval does not survive a change to content the signer never read.
+
       Manual QA execution stays here — it never becomes tasks in tasks.md.
     requires:
       - specs
@@ -394,41 +420,69 @@ artifacts:
         - No task may touch files outside this change's scope.
 
       TEST CODE GENERATION — the first task under each platform:
-        - When the change has a tests.md carrying Regression rows, the FIRST
-          task under each platform heading MUST generate that platform's
-          automated test code from those scenarios, before any implementation
-          task for that platform. Shared/cross-cutting setup groups still come
-          before the platform sections; this rule orders within a platform.
+        - When the change has a tests.md carrying rows a tester assigned to a
+          framework, the FIRST task under each platform heading MUST generate
+          that platform's automated test code from those scenarios, before any
+          implementation task for that platform. Shared/cross-cutting setup
+          groups still come before the platform sections; this rule orders
+          within a platform.
         - DELEGATE it. The task's action is to invoke
           `@apzumi-generate-test-code` (a separate subagent owned outside this
-          workflow), naming the platform, the framework from the project
-          context, and the T-numbers it covers. Never write test code inline
-          in tasks.md, and never expand the scenarios into steps here.
+          workflow), naming the platform, its framework, and the T-numbers it
+          covers. Never write test code inline in tasks.md, and never expand
+          the scenarios into steps here.
         - Prefix the task `**[E2E automation]**` so it is visibly distinct from
           the layer-2 test tasks in the final group.
-        - Cover Regression rows ONLY. One-off scenarios are one-time checks
-          (migration backfills, post-deploy verifications) and must not become
-          permanent automated tests.
+        - WHICH ROWS. Cover exactly the rows whose `Decision` names this
+          platform's framework — not every Regression row. `Decision` is the
+          tester's judgement about what is worth automating, and generating a
+          test for a row they marked `manual` overrides a human decision the
+          gate exists to protect. A row spanning several platforms carries a
+          decision per platform (`Web: playwright · Mobile Android: manual`);
+          read the part for the platform you are writing the task under.
+          One-off rows are never automated regardless of decision: they are
+          one-time checks and must not become permanent tests.
+        - WHICH FRAMEWORK. Take it from the Test Automation table in
+          openspec/CONVENTIONS.md, which binds each platform to its framework
+          and test root. That table is the project's answer; the project
+          context is not.
         - tests.md is grouped by capability but tasks are grouped by platform:
-          assign each scenario to the platform that can actually exercise it,
-          and say so in the task. A scenario no platform can automate (a manual
-          inspection, an external system) is simply left out — note it in the
+          use each row's `Platforms` cell to decide which task owns it. A
+          scenario no platform can automate is simply left out — note it in the
           task rather than inventing a test for it.
-        - ACCEPTANCE is that the generated tests exist and RUN, failing because
-          the feature is absent. They are not expected to pass: the
-          implementation tasks that follow are what turn them green. Do not
-          mark the task complete on a passing suite, and do not weaken a
+        - ACCEPTANCE is that the generated tests exist and that the agent
+          reports one of three outcomes per platform, explicitly:
+            failed_as_expected     the suite ran and failed because the feature
+                                   is absent — the outcome to aim for
+            unverified: no device  a device-bound framework with no device
+                                   attached (a developer running this task
+                                   normally has no phone connected)
+            unverified: no build   nothing servable to run against yet
+          The task is complete on any of the three, because a test that cannot
+          be run is still a test that exists — but the outcome is recorded, so
+          "not checked" never passes for "checked". A passing suite is NOT
+          acceptance: it means the test proves nothing. Never weaken a
           generated test to make it pass.
         - Selectors, test ids, routes, and screen names the tests need do not
-          exist yet. Take them from design.md — if design.md does not name
-          them, the generated tests will need a second pass, so prefer to fix
-          design.md first.
+          exist yet. Take them from design.md's `## Test Identifiers` — if it
+          does not name one, stop and fix design.md rather than inventing a
+          string the implementer will not use.
         - SKIP this task for a platform with no automatable scenarios (e.g.
           Shared infrastructure), and for a `skip_specs` change.
         - This does NOT replace the layer-2 tasks in the final unit &
           integration group. tests.md describes only externally observable
           behaviour, so it can drive end-to-end/UI-level tests and nothing
           deeper.
+
+      TEST IDENTIFIERS ARE A CONTRACT, NOT A SUGGESTION:
+        - A task that creates or changes a UI control MUST use the exact
+          identifier design.md's `## Test Identifiers` names for it. The E2E
+          tests above are written against those strings before the UI exists,
+          so an id chosen freshly at implementation time breaks a test that was
+          correct — and it breaks it in the shape of a product defect, which is
+          the expensive way to find out.
+        - If the identifier design.md names cannot be used, STOP and report the
+          contradiction. Do not quietly pick another one.
     requires:
       - specs
       - design

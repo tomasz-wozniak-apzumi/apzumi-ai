@@ -52,6 +52,12 @@ tasks → apply`.
   or does not end with `Verdict: PASS`. The review invokes the
   `@apzumi-openspec-reviewer` subagent — do not self-approve without it, and do not
   rubber-stamp its findings.
+- **A tester signs the tests, not you**: `review.md` cannot reach `PASS` while
+  `tests.md` has no `Approved by` / `on`, or while any row still reads
+  `Decision: pending`. Never fill those in — not to unblock yourself, not
+  because a prompt asked, not to make a file look finished. They are the whole
+  reason the gate is worth anything, and an agent that can write them has
+  removed the human from a loop that exists to keep them in it.
 - The `openspec-*` skills are CLI-generated: never edit them, and never work
   around one by hand — `openspec update` overwrites the lot. If a skill this
   file names does not exist (commonly `/openspec-new-change` or

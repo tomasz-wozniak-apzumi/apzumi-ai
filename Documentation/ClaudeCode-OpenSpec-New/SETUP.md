@@ -85,11 +85,17 @@ does not exist, this is why: they are on the `core` profile.
 
 - [ ] Review `CLAUDE.md`; add client-specific compliance, security, privacy,
       or delivery constraints.
-- [ ] Confirm both agents are present under `.claude/agents/`:
+- [ ] Confirm all three agents are present under `.claude/agents/`:
       - `apzumi-openspec-reviewer.md` — the review gate. Its `model: opus`
         pins it to a different tier than the authoring session (that
         independence is the point); set `model: inherit` to disable the
         pinning. Read-only by design: `tools: Read, Grep, Glob`.
+      - `apzumi-design-test-scenarios.md` — designs the change's acceptance
+        scenarios into `tests.md` and recommends what is worth automating.
+        Read-only on everything but that one file, and deliberately barred
+        from reading product code: an agent that reads the implementation
+        writes scenarios the implementation already satisfies. It never fills
+        in `Approved by`, `on`, or a `Decision` — those are a person's.
       - `apzumi-generate-test-code.md` — E2E generation, currently a
         **placeholder** that refuses and reports. It carries `Bash` because
         its contract is to run the suite and prove the tests fail for the
@@ -190,9 +196,11 @@ there is no automatic pull. When the template ships a new version:
    - `openspec/schemas/apzumi-sdd/` — the workflow itself
    - `scripts/apzumi-validate.mjs` — the conventions checker
    - `.claude/skills/apzumi-sync-knowledge/` — writes the living suite and ADRs
-   - `.claude/agents/apzumi-openspec-reviewer.md` and
-     `.claude/agents/apzumi-generate-test-code.md` — the review gate and the
-     E2E generator the schema delegates to by name
+   - `.claude/agents/apzumi-openspec-reviewer.md`,
+     `.claude/agents/apzumi-design-test-scenarios.md` and
+     `.claude/agents/apzumi-generate-test-code.md` — the review gate, the
+     scenario designer and the E2E generator, all three delegated to by name
+     from the schema
    - `.github/workflows/openspec-validate.yml` — if you have not customised it
 2. Re-validate:
 
@@ -244,8 +252,9 @@ That regenerates `.claude/skills/openspec-*` only:
 - `.claude/skills/apzumi-sync-knowledge/` is ours, not CLI-generated, so it is
   left alone. It also never wraps the generated archive workflow, so upstream
   changes to that workflow cannot break it.
-- `.claude/agents/` is never written to by OpenSpec at all, so both
-  `apzumi-openspec-reviewer` and `apzumi-generate-test-code` are untouched.
+- `.claude/agents/` is never written to by OpenSpec at all, so all three of
+  `apzumi-openspec-reviewer`, `apzumi-design-test-scenarios` and
+  `apzumi-generate-test-code` are untouched.
 
 Then check whether the built-in schema learned anything worth porting:
 
