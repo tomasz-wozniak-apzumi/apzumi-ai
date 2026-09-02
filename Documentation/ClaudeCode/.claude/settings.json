@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "plan",
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "LS",
+      "TodoWrite",
+      "Bash(openspec *)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git submodule status*)",
+      "Bash(node scripts/check-repos.mjs*)"
+    ],
+    "ask": [
+      "WebFetch",
+      "Edit",
+      "Write",
+      "MultiEdit",
+      "NotebookEdit",
+      "Task"
+    ],
+    "additionalDirectories": [
+      "./openspec",
+      "./examples",
+      "./submodules"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v node >/dev/null 2>&1 && node \"$CLAUDE_PROJECT_DIR/scripts/check-repos.mjs\" --root \"$CLAUDE_PROJECT_DIR\" || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

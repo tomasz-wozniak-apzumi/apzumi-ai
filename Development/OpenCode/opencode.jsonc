@@ -1,0 +1,494 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "github-copilot/claude-sonnet-4.6", // "opencode-go/deepseek-v4-pro"
+  "small_model": "github-copilot/gpt-5-mini", // for generating task title
+  "plugin": [
+    "@opencode_weave/weave",
+    [
+      "@klocus/opencode-path-instructions",
+      {
+        "agents": {
+          "mode": "blacklist",
+          "list": ["pattern", "warp", "weft", "thread", "spindle"]
+        },
+        "injectOn": ["edit", "write", "read"]
+      }
+    ]
+  ],
+  "tools": {
+    "websearch": true,
+    "codesearch": true
+  },
+  "lsp": true,
+  // disable the built-in agents, which helps keep routing focused on the Weave's own agent set
+  "agent": {
+    "general": {
+      "disable": true
+    },
+    "explore": {
+      "disable": true
+    }
+  },
+  "mcp": {},
+  "watcher": {
+    "ignore": [".git/**", ".idea/**", "node_modules/**", "dist/**", "tmp/**"]
+  },
+  "autoupdate": true,
+  "share": "disabled", // disable conversation sharing by default, you can change it to "manual" or "auto" to enable sharing
+  "permission": {
+    "*": "allow",
+    "doom_loop": "ask",
+    "external_directory": "deny",
+    "bash": {
+      "*": "allow",
+
+      // ─── CATASTROPHIC DESTROYS (always deny) ─────────────────────────────
+
+      // macOS / Linux — filesystem wipe
+      "rm -rf /": "deny",
+      "rm -rf /*": "deny",
+      "rm -rf ~": "deny",
+      "rm -rf ~/*": "deny",
+      "rm -rf /usr": "deny",
+      "rm -rf /bin": "deny",
+      "rm -rf /etc": "deny",
+      "rm -rf /lib": "deny",
+      "rm -rf /lib64": "deny",
+      "rm -rf /opt": "deny",
+      "rm -rf /sbin": "deny",
+      "rm -rf /boot": "deny",
+      "rm -rf /proc": "deny",
+      "rm -rf /sys": "deny",
+      "rm -rf /root": "deny",
+      "rm -rf /home": "deny",
+      "rm -rf /System": "deny", // macOS
+      "rm -rf /Library": "deny", // macOS
+      "rm -rf /Users": "deny", // macOS
+      "rm -rf /private": "deny", // macOS
+      "rm -rf /var": "deny",
+      "rm -rf /dev": "deny",
+      "rm -rf /Volumes": "deny", // macOS
+
+      // Linux — disk wipe
+      "mkfs*": "deny",
+      "mkfs.ext4 *": "deny",
+      "mkfs.xfs *": "deny",
+      "mkfs.ntfs *": "deny",
+      "wipefs *": "deny",
+      "shred /dev/*": "deny",
+
+      // macOS — disk wipe
+      "dd if=/dev/zero of=/dev/disk*": "deny",
+      "dd if=/dev/zero of=/dev/rdisk*": "deny",
+      "diskutil eraseDisk*": "deny",
+      "diskutil eraseVolume*": "deny",
+      "diskutil partitionDisk*": "deny",
+      "diskutil reformat*": "deny",
+      "newfs_*": "deny",
+
+      // Fork bomb
+      ":(){ :|:& };:": "deny",
+      "forkbomb": "deny",
+
+      // Shutdown / reboot
+      "shutdown *": "deny",
+      "reboot *": "deny",
+      "poweroff *": "deny",
+      "halt *": "deny",
+      "init 0": "deny",
+      "init 6": "deny",
+      "systemctl poweroff*": "deny",
+      "systemctl reboot*": "deny",
+      "systemctl halt*": "deny",
+
+      // ─── WINDOWS — CATASTROPHIC DESTROYS (always deny) ───────────────────
+
+      // PowerShell / CMD — filesystem wipe
+      "Remove-Item -Recurse -Force C:\\*": "deny",
+      "Remove-Item -Recurse -Force C:\\": "deny",
+      "rd /s /q C:\\": "deny",
+      "rd /s /q C:\\Windows": "deny",
+      "del /f /s /q C:\\*": "deny",
+      "format C:*": "deny",
+      "format D:*": "deny",
+
+      // Windows shutdown / reboot
+      "shutdown /s*": "deny",
+      "shutdown /r*": "deny",
+      "Stop-Computer*": "deny",
+      "Restart-Computer*": "deny",
+
+      // Windows disk wipe
+      "diskpart*": "deny",
+
+      // PowerShell fork-bomb equivalent
+      "while($true){ Start-Process*": "deny",
+
+      // ─── macOS — PRIVILEGED / RISKY (ask) ─────────────────────────────────
+
+      "sudo *": "ask",
+      "su *": "ask",
+      "su -": "ask",
+      "passwd *": "ask",
+      "dscl . -passwd*": "ask",
+      "dscl . -create*": "ask",
+      "dscl . -delete*": "ask",
+      "sysadminctl *": "ask",
+
+      "rm -rf *": "ask",
+      "rm -r *": "ask",
+
+      "curl * | sh": "ask",
+      "curl * | bash": "ask",
+      "wget * | sh": "ask",
+      "wget * | bash": "ask",
+      "curl * | sudo sh": "deny",
+      "curl * | sudo bash": "deny",
+      "wget * | sudo sh": "deny",
+      "wget * | sudo bash": "deny",
+
+      "nc -l*": "ask",
+      "ncat -l*": "ask",
+      "nc -lp*": "ask",
+      "ncat -lp*": "ask",
+      "netcat -l*": "ask",
+      "nc * -e*": "ask",
+      "ncat * -e*": "ask",
+
+      "ssh *": "ask",
+      "scp *": "ask",
+      "sftp *": "ask",
+      "rsync *": "ask",
+
+      "chown -R /*": "ask",
+      "chmod -R 000 *": "ask",
+      "chmod 000 *": "ask",
+      "chmod -R 777 /": "deny",
+
+      "mv * /dev/null": "ask",
+
+      "dd *": "ask",
+      "diskutil *": "ask",
+
+      "git push *": "ask",
+      "git push --force*": "ask",
+      "git push -f*": "ask",
+      "git reset --hard*": "ask",
+      "git clean -fd*": "ask",
+
+      "docker system prune*": "ask",
+      "docker rm -f *": "ask",
+      "docker rmi -f *": "ask",
+      "docker volume rm *": "ask",
+      "docker network rm *": "ask",
+
+      "npm publish*": "ask",
+      "npx *": "ask",
+      "npx ng *": "allow",
+      "npx create-ng*": "allow",
+      "npx @angular/cli*": "allow",
+
+      "pip install *": "ask",
+      "pip uninstall *": "ask",
+      "pip3 install *": "ask",
+      "pip3 uninstall *": "ask",
+
+      "brew *": "ask",
+      "brew install *": "ask",
+      "brew uninstall *": "ask",
+      "brew cleanup*": "ask",
+      "port *": "ask",
+      "conda install *": "ask",
+      "conda remove *": "ask",
+
+      "cargo install *": "ask",
+      "go install *": "ask",
+      "gem install *": "ask",
+      "bundle install *": "ask",
+      "composer install *": "ask",
+
+      "make install*": "ask",
+      "make clean*": "ask",
+
+      "kubectl * delete*": "ask",
+      "kubectl * apply*": "ask",
+      "helm *": "ask",
+      "minikube *": "ask",
+      "colima *": "ask",
+      "lima *": "ask",
+
+      "terraform apply*": "ask",
+      "terraform destroy*": "ask",
+      "pulumi up*": "ask",
+      "pulumi destroy*": "ask",
+
+      "aws *": "ask",
+      "gcloud *": "ask",
+      "az *": "ask",
+      "firebase *": "ask",
+      "vercel *": "ask",
+      "netlify *": "ask",
+      "heroku *": "ask",
+      "flyctl *": "ask",
+      "railway *": "ask",
+      "render *": "ask",
+
+      "xcode-select --install": "ask",
+      "softwareupdate *": "ask",
+      "installer *": "ask",
+      "pkgutil *": "ask",
+
+      "spctl *": "ask",
+      "codesign *": "ask",
+      "xattr *": "ask",
+      "xattr -d com.apple.quarantine*": "ask",
+
+      "defaults write*": "ask",
+      "defaults delete*": "ask",
+      "plutil *": "ask",
+
+      "launchctl load*": "ask",
+      "launchctl unload*": "ask",
+      "launchctl remove*": "ask",
+      "launchctl start*": "ask",
+      "launchctl stop*": "ask",
+
+      "killall *": "ask",
+      "pkill *": "ask",
+      "kill -9 *": "ask",
+
+      "csrutil *": "ask",
+      "nvram *": "ask",
+      "bless *": "ask",
+      "asr *": "ask",
+
+      // ─── LINUX — PRIVILEGED / RISKY (ask) ────────────────────────────────
+
+      // Privilege escalation
+      "sudo *": "ask", // (shared with macOS)
+      "su *": "ask", // (shared with macOS)
+      "visudo *": "ask",
+      "usermod *": "ask",
+      "useradd *": "ask",
+      "userdel *": "ask",
+      "groupmod *": "ask",
+      "groupadd *": "ask",
+      "groupdel *": "ask",
+      "chpasswd *": "ask",
+      "newgrp *": "ask",
+
+      // System services
+      "systemctl enable*": "ask",
+      "systemctl disable*": "ask",
+      "systemctl start*": "ask",
+      "systemctl stop*": "ask",
+      "systemctl restart*": "ask",
+      "service * start": "ask",
+      "service * stop": "ask",
+      "service * restart": "ask",
+
+      // Package management
+      "apt install *": "ask",
+      "apt-get install *": "ask",
+      "apt remove *": "ask",
+      "apt-get remove *": "ask",
+      "apt purge *": "ask",
+      "apt-get purge *": "ask",
+      "dpkg -i *": "ask",
+      "dnf install *": "ask",
+      "dnf remove *": "ask",
+      "yum install *": "ask",
+      "yum remove *": "ask",
+      "pacman -S *": "ask",
+      "pacman -R *": "ask",
+      "zypper install *": "ask",
+      "zypper remove *": "ask",
+      "snap install *": "ask",
+      "snap remove *": "ask",
+      "flatpak install *": "ask",
+      "flatpak remove *": "ask",
+
+      // File permissions
+      "chmod 777 *": "ask",
+      "chmod -R 777 *": "ask",
+      "chmod 000 *": "ask", // (shared with macOS)
+      "chown -R *": "ask",
+
+      // Kernel / boot
+      "modprobe *": "ask",
+      "rmmod *": "ask",
+      "insmod *": "ask",
+      "grub-install *": "ask",
+      "update-grub*": "ask",
+      "grub2-install *": "ask",
+
+      // Network listeners & remote access
+      "iptables *": "ask",
+      "nftables *": "ask",
+      "ufw *": "ask",
+      "firewall-cmd *": "ask",
+      "nc -l*": "ask", // (shared with macOS)
+
+      // Cron / scheduled tasks
+      "crontab -e*": "ask",
+      "crontab -r*": "ask",
+
+      // Disk / filesystem
+      "mount *": "ask",
+      "umount *": "ask",
+      "fsck *": "ask",
+      "fdisk *": "ask",
+      "parted *": "ask",
+      "lvm *": "ask",
+      "vgremove *": "ask",
+      "lvremove *": "ask",
+
+      // ─── WINDOWS — PRIVILEGED / RISKY (ask) ──────────────────────────────
+
+      // Privilege escalation
+      "runas *": "ask",
+      "net user *": "ask",
+      "net localgroup *": "ask",
+      "Set-LocalUser *": "ask",
+      "Add-LocalGroupMember *": "ask",
+      "Remove-LocalGroupMember *": "ask",
+
+      // Registry modifications
+      "reg add *": "ask",
+      "reg delete *": "ask",
+      "reg import *": "ask",
+      "Set-ItemProperty HKLM*": "ask",
+      "Set-ItemProperty HKCU*": "ask",
+      "Remove-ItemProperty HKLM*": "ask",
+      "Remove-ItemProperty HKCU*": "ask",
+      "New-ItemProperty HKLM*": "ask",
+
+      // Services
+      "sc start *": "ask",
+      "sc stop *": "ask",
+      "sc delete *": "ask",
+      "sc create *": "ask",
+      "Start-Service *": "ask",
+      "Stop-Service *": "ask",
+      "Set-Service *": "ask",
+      "New-Service *": "ask",
+
+      // Scheduled tasks
+      "schtasks /create*": "ask",
+      "schtasks /delete*": "ask",
+      "schtasks /run*": "ask",
+      "Register-ScheduledTask *": "ask",
+      "Unregister-ScheduledTask *": "ask",
+
+      // Package management
+      "winget install *": "ask",
+      "winget uninstall *": "ask",
+      "choco install *": "ask",
+      "choco uninstall *": "ask",
+      "scoop install *": "ask",
+      "scoop uninstall *": "ask",
+      "Install-Module *": "ask",
+      "Uninstall-Module *": "ask",
+      "Install-Package *": "ask",
+
+      // File operations (dangerous)
+      "Remove-Item -Recurse*": "ask",
+      "Remove-Item -Force*": "ask",
+      "rd /s *": "ask",
+      "del /f /s *": "ask",
+      "Move-Item * C:\\Windows*": "ask",
+      "Copy-Item * C:\\Windows*": "ask",
+
+      // PowerShell execution policy
+      "Set-ExecutionPolicy *": "ask",
+      "Invoke-Expression *": "ask", // iex — common malware vector
+      "iex *": "ask",
+
+      // PowerShell remote execution / downloads
+      "Invoke-WebRequest * | iex": "deny",
+      "iwr * | iex": "deny",
+      "curl * | iex": "deny",
+      "Invoke-RestMethod * | iex": "deny",
+
+      // Network / firewall
+      "netsh *": "ask",
+      "New-NetFirewallRule *": "ask",
+      "Remove-NetFirewallRule *": "ask",
+      "Set-NetFirewallRule *": "ask",
+
+      // Process management
+      "Stop-Process -Force*": "ask",
+      "taskkill /f *": "ask",
+
+      // Hosts file
+      "notepad C:\\Windows\\System32\\drivers\\etc\\hosts": "ask",
+
+      // Git (shared with macOS/Linux entries above, adding Windows-style paths)
+      "git push *": "ask", // (shared)
+      "git push --force*": "ask", // (shared)
+      "git reset --hard*": "ask", // (shared)
+      "git clean -fd*": "ask", // (shared)
+
+      // Cloud CLI (shared with macOS/Linux above)
+      "aws *": "ask", // (shared)
+      "gcloud *": "ask", // (shared)
+      "az *": "ask", // (shared)
+
+      // IIS / Windows web server
+      "iisreset *": "ask",
+      "appcmd *": "ask",
+
+      // WSL management
+      "wsl --unregister *": "ask",
+      "wsl --import *": "ask",
+      "wsl --terminate *": "ask",
+
+      // ─── rtk prefixed rules (ONLY IF YOU USE RTK) ──────────────
+
+      //"rtk rm -rf /": "deny",
+      //"rtk rm -rf /*": "deny",
+      //"rtk rm -rf ~": "deny",
+      //"rtk rm -rf ~/*": "deny",
+
+      //"rtk dd if=/dev/zero of=/dev/disk*": "deny",
+      //"rtk diskutil eraseDisk*": "deny",
+      //"rtk diskutil eraseVolume*": "deny",
+
+      //"rtk sudo *": "ask",
+      //"rtk su *": "ask",
+      //"rtk passwd *": "ask",
+
+      //"rtk rm -rf *": "ask",
+      //"rtk rm -r *": "ask",
+
+      //"rtk curl * | sh": "ask",
+      //"rtk curl * | bash": "ask",
+      //"rtk curl * | sudo sh": "deny",
+      //"rtk curl * | sudo bash": "deny",
+
+      //"rtk nc -l*": "ask",
+      //"rtk ncat -l*": "ask",
+      //"rtk ssh *": "ask",
+      //"rtk scp *": "ask",
+
+      //"rtk git push *": "ask",
+      //"rtk git push --force*": "ask",
+      //"rtk git reset --hard*": "ask",
+
+      //"rtk npx *": "ask",
+      //"rtk npx ng *": "allow",
+
+      //"rtk brew *": "ask",
+      //"rtk pip install *": "ask",
+      //"rtk npm install *": "ask",
+
+      //"rtk kubectl * delete*": "ask",
+      //"rtk kubectl * apply*": "ask",
+      //"rtk terraform apply*": "ask",
+      //"rtk terraform destroy*": "ask",
+
+      //"rtk aws *": "ask",
+      //"rtk gcloud *": "ask"
+    }
+  }
+}

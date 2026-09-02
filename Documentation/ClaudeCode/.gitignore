@@ -1,0 +1,6 @@
+# ClaudeCode local state — per-developer, never shared
+.claude/settings.local.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

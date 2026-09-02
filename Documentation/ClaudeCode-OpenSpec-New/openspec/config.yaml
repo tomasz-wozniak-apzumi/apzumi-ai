@@ -1,0 +1,88 @@
+# Apzumi OpenSpec project configuration.
+#
+# Division of responsibility:
+#   - openspec/schemas/apzumi-sdd/  -> org-wide workflow: artifact set, order,
+#     templates, formatting rules. Don't edit per project; propose changes to
+#     the shared template instead.
+#   - config.yaml (this file)       -> per-project facts injected into every
+#     artifact prompt (`context`) plus per-artifact rules for THIS project.
+#   - openspec/CONVENTIONS.md       -> per-project taxonomy and long-form facts
+#     (platform names, Capability Map, terminology, repo wiring, API reference
+#     procedure). Reference it from context; never duplicate it there.
+
+schema: apzumi-sdd
+
+# `context` is injected into ALL artifacts. Fill it in for this project and
+# delete what does not apply. Keep it factual and short — long-form material
+# belongs in CONVENTIONS.md.
+context: |
+  Project: <name — one line on what it is>
+
+  Stack: <language(s), framework(s), datastore>
+  Testing: <runner(s) and where tests live>
+  Conventions: <lint/format, module boundaries, naming>
+
+  READ openspec/CONVENTIONS.md BEFORE WRITING ANY ARTIFACT. It is the single
+  source of truth for this project's platform names (used verbatim as section
+  headings in specs and tasks), the Capability Map (the agreed spec taxonomy —
+  target a mapped capability rather than inventing a sibling), approved
+  terminology, repository wiring, and API reference procedure. Do not restate
+  those lists here — one list, one place, so they cannot drift apart.
+
+  # API source of truth — keep this pattern when the project has a live
+  # contract; delete otherwise. Example (from a real project):
+  #
+  #   The backend contract is the Swagger/OpenAPI doc on the dev environment —
+  #   there is no copy in this repo; read the API itself:
+  #   - Backend (client-facing): https://<host>/v3/api-docs/api
+  #   Read it whenever a change touches the backend — when writing backend
+  #   requirements, when generating tasks, and again before implementing.
+  #   Never assume an endpoint, DTO, or field is new without checking. The
+  #   documents are large; fetch and filter rather than reading whole.
+
+  Principle: extend existing capabilities before creating new ones; keep specs
+  organised by coarse domain, not by feature.
+
+# Per-artifact rules for THIS project only — the schema already enforces the
+# org-wide structure, so keep these few and project-specific.
+#
+# NOTE: Always wrap a rule in double quotes if it contains "#" (e.g. a
+# "## Heading" reference). In unquoted YAML, a "#" preceded by a space starts
+# a comment, which silently truncates the rule before it ever reaches
+# `openspec instructions`. 
+#
+# Commented example below (backend API grounding) — adapt or delete:
+#
+# rules:
+#   design:
+#     - "If the Backend is in scope, read its OpenAPI doc (see API source of truth above) before describing any backend behaviour"
+#     - "State for each backend capability whether it is served by an EXISTING endpoint (name it) or requires a NEW one — do not design new API surface when an existing endpoint already covers the need"
+#   tasks:
+#     - "Every backend task must cite the endpoint or DTO it touches and mark it MODIFY (already in the OpenAPI doc) or NEW (absent from it)"
+#     - "Never write a task that adds an endpoint or DTO field that already exists — write a MODIFY task against the existing one instead"
+
+# Advisory guidance for the apply/archive operations. Keep this SMALL: it is
+# per-project advice, and the org-wide behaviour already lives in the schema
+# (`apply.instruction` carries the full definition of done). Add an `apply:`
+# block here only when this project needs something the schema does not say.
+#
+# The single archive entry is a safety net for the one thing that is easy to
+# forget: running `/apzumi-sync-knowledge` FIRST, which merges Regression
+# scenarios into the living suite and extracts ADRs. Nothing structurally
+# forces that step, so this warning is what catches an archive that would
+# otherwise entomb them. (The conventions checker catches it after the fact.)
+# Other options OpenSpec 1.9.0 accepts here, unused by default:
+#   references:  ids of other registered OpenSpec STORES whose specs this
+#                project draws on. Their spec index (not content) is injected
+#                into artifact instructions. These are spec repos, NOT code
+#                repos — connected implementation repos stay documented in
+#                CONVENTIONS.md.
+#   store:       store id used as the OpenSpec root when this openspec/ has no
+#                local specs/ or changes/.
+#   githubCopilot.cloudAgent:  opt-in for Copilot cloud-agent files.
+# Note: `context` above is capped at 50KB.
+
+operations:
+  archive:
+    guidance:
+      - "Before archiving, check whether tests.md has Regression-tagged rows or design.md has a ## Decisions & Trade-offs section; if either is non-empty and apzumi-sync-knowledge has not been run for this change, warn that archiving now leaves them in the archive only, and confirm before proceeding"

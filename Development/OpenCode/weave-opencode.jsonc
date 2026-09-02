@@ -1,0 +1,83 @@
+/*******************************************************************************************************
+ * FLOW
+ * Out of the box, Weave uses this delegation flow:
+ * User → Loom (orchestrator)
+ *         ├── Pattern (planning)
+ *         ├── Thread (exploration)
+ *         ├── Spindle (research)
+ *         ├── Shuttle (coding)
+ *         ├── Weft (review)
+ *         └── Warp (security)
+ *
+ * Plan execution: Loom → Tapestry (step-by-step execution)
+ *
+ * DOCS
+ * https://tryweave.io/docs/guide/full-example
+ */
+
+{
+  "agents": {
+    /***************************************************************************************************
+     * TOP MODELS
+     * The strongest reasoning you can afford. These agents make decisions that cascade through
+     * the entire workflow — bad judgment here means bad results everywhere.
+     */
+
+    // Orchestrator: plans, delegates, and supervises all work.
+    "loom": {
+      "display_name": "Loom",
+      "prompt_append": "If the task isn't straightforward, ALWAYS use the `grilling` skill before implementation or writing out a plan. For small tasks handled directly (without a plan), apply the `code-review` skill to your own implementation before presenting results.",
+      "model": "github-copilot/gpt-5.4" // "opencode-go/deepseek-v4-pro"
+    },
+    // Strategic Planner: researches the codebase and produces `.weave/plans/` files.
+    "pattern": {
+      "display_name": "Pattern",
+      "model": "github-copilot/gemini-3.5-flash" // "opencode-go/kimi-k2.6"
+    },
+    // Security Auditor: audits for security vulnerabilities. Rejects by default on security patterns.
+    "warp": {
+      "display_name": "Warp",
+      "model": "github-copilot/gpt-5.4" // "opencode-go/deepseek-v4-pro"
+    },
+
+    /***************************************************************************************************
+     * MID MODELS
+     * Good coding ability and comprehension. They follow structured plans and analyze code.
+     * They don't need to be brilliant, but they can't be sloppy.
+     */
+
+    // Execution Engine: drives plan execution step by step.
+    "tapestry": {
+      "display_name": "Tapestry",
+      "model": "github-copilot/gpt-5.3-codex" // "opencode-go/qwen3.6-plus"
+    },
+    // Coding Specialist: domain-specific worker with full tool access, dispatched via the category system.
+    "shuttle": {
+      "display_name": "Shuttle",
+      "model": "github-copilot/gpt-5.3-codex" // "opencode-go/deepseek-v4-pro"
+    },
+    // Reviewer / Auditor: validates plans and reviews work. Rejects only for blocking issues.
+    "weft": {
+      "display_name": "Weft",
+      "prompt_append": "Use `code-review` skill to identify issues and improvements.",
+      "model": "github-copilot/gpt-5.3-codex" // "opencode-go/kimi-k2.6"
+    },
+
+    /***************************************************************************************************
+     * ECONOMY MODELS
+     * Speed over depth. These agents read files and search – they don't make architectural decisions.
+     * Fast, cheap models work great here.
+     */
+
+    // Codebase Explorer: fast, read-only analysis and search.
+    "thread": {
+      "display_name": "Thread",
+      "model": "github-copilot/gpt-5-mini" // "opencode-go/deepseek-v4-flash"
+    },
+    // External Researcher: web fetching and research.
+    "spindle": {
+      "display_name": "Spindle",
+      "model": "github-copilot/gpt-5-mini" // "opencode-go/deepseek-v4-flash"
+    }
+  }
+}

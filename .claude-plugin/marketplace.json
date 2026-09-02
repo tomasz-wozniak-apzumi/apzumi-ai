@@ -1,0 +1,146 @@
+{
+  "name": "apzumi",
+  "owner": {
+    "name": "Apzumi",
+    "email": "pawel.klockiewicz@apzumi.pl"
+  },
+  "description": "Apzumi skills and hooks for software design, development, and collaboration",
+  "version": "1.1.1",
+  "plugins": [
+    {
+      "name": "apzu-design-skills",
+      "description": "Skills for domain design, decision recording, and idea stress-testing",
+      "source": "./Development/ClaudeCode/skills/design",
+      "skills": [
+        "./grilling",
+        "./grill-me",
+        "./grill-with-docs",
+        "./to-spec",
+        "./to-tickets",
+        "./domain-modeling",
+        "./adr",
+        "./codebase-design"
+      ],
+      "strict": false
+    },
+    {
+      "name": "apzu-git-skills",
+      "description": "Skills for Git operations and Conventional Commits workflow",
+      "source": "./Development/ClaudeCode/skills/git",
+      "skills": ["./git-workflow", "./commit", "./resolving-merge-conflicts"],
+      "strict": false
+    },
+    {
+      "name": "apzu-dev-skills",
+      "description": "Skills for test-driven development and architecture analysis",
+      "source": "./Development/ClaudeCode/skills/dev",
+      "skills": [
+        "./ponytail-review",
+        "./ponytail-audit",
+        "./ponytail-debt",
+        "./tdd",
+        "./improve-codebase-architecture",
+        "./diagnosing-bugs",
+        "./implement",
+        "./full-code-review"
+      ],
+      "hooks": {
+        "SessionStart": [
+          {
+            "matcher": "startup|resume|clear|compact",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "BODY=$(awk 'BEGIN{c=0} /^---$/{c++; next} c>=2{print}' \"${CLAUDE_PLUGIN_ROOT}/ponytail/SKILL.md\"); printf '%s' \"$BODY\" | jq -Rs '{hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:(\"PONYTAIL MODE ACTIVE — apply on every response, main thread and subagents alike.\\n\\n\" + .)}}'",
+                "timeout": 5
+              }
+            ]
+          }
+        ],
+        "SubagentStart": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "BODY=$(awk 'BEGIN{c=0} /^---$/{c++; next} c>=2{print}' \"${CLAUDE_PLUGIN_ROOT}/ponytail/SKILL.md\"); printf '%s' \"$BODY\" | jq -Rs '{hookSpecificOutput:{hookEventName:\"SubagentStart\",additionalContext:(\"PONYTAIL MODE ACTIVE — apply on every response, main thread and subagents alike.\\n\\n\" + .)}}'",
+                "timeout": 5
+              }
+            ]
+          }
+        ]
+      },
+      "strict": false
+    },
+    {
+      "name": "apzu-meta-skills",
+      "description": "Skills for creating hooks, skills, and managing session context",
+      "source": "./Development/ClaudeCode/skills/meta",
+      "skills": ["./hook-creator", "./skill-creator", "./handoff"],
+      "strict": false
+    },
+    {
+      "name": "apzu-code-review-hooks",
+      "description": "Auto-trigger /full-code-review when Claude Code finishes a coding session with file changes",
+      "source": "./Development/ClaudeCode",
+      "hooks": {
+        "SessionStart": [
+          {
+            "matcher": "",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "find /tmp -name 'claude-code-changes-*' -mtime +1 -delete 2>/dev/null; exit 0",
+                "async": true
+              }
+            ]
+          }
+        ],
+        "PostToolUse": [
+          {
+            "matcher": "Edit|Write",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "SESSION_ID=$(cat | jq -r '.session_id // \"\"' 2>/dev/null); [ -n \"$SESSION_ID\" ] && touch \"/tmp/claude-code-changes-$SESSION_ID\" 2>/dev/null; exit 0",
+                "async": true
+              }
+            ]
+          }
+        ],
+        "Stop": [
+          {
+            "matcher": "",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "INPUT=$(cat); command -v jq > /dev/null 2>&1 || exit 0; echo \"$INPUT\" | jq -e '.stop_hook_active' > /dev/null 2>&1 && exit 0; SESSION_ID=$(echo \"$INPUT\" | jq -r '.session_id // \"\"'); FLAG=\"/tmp/claude-code-changes-$SESSION_ID\"; [ -n \"$SESSION_ID\" ] && [ -f \"$FLAG\" ] && { rm -f \"$FLAG\"; echo 'Silently run the full-code-review skill now.'; exit 2; }; exit 0",
+                "asyncRewake": true,
+                "rewakeMessage": "Code changes were made this session — "
+              }
+            ]
+          }
+        ]
+      },
+      "strict": false
+    },
+    {
+      "name": "apzu-skill-forced-eval-hook",
+      "description": "Force explicit skill evaluation on every user prompt so relevant skills activate reliably",
+      "source": "./Development/ClaudeCode/hooks/skill-eval",
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "${CLAUDE_PLUGIN_ROOT}/skill-forced-eval-hook.sh",
+                "timeout": 5
+              }
+            ]
+          }
+        ]
+      },
+      "strict": false
+    }
+  ]
+}

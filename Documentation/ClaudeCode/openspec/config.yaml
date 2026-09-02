@@ -1,0 +1,57 @@
+schema: spec-driven
+
+project:
+  name: {Project name}
+
+context:
+  product_type: {web application / mobile application / internal platform / API service / other}
+  domain: {business domain}
+  client_type: {client type}
+  deployment:
+    - {AWS / Azure / GCP / on-premise / hybrid / other}
+  platforms:
+    - label: Frontend
+      stack: {Angular / React / Vue / other}
+      scope: {Admin panel, customer portal, public website, etc.}
+    - label: Backend
+      stack: {Java / Node.js / Python / .NET / other}
+      scope: {API, orchestration layer, integration service, domain service, etc.}
+    - label: Shared infrastructure
+      stack: {AWS / Terraform / Cognito / CI/CD / other}
+      scope: {Only include when infrastructure or shared services are affected.}
+
+standards:
+  conventions_file: openspec/CONVENTIONS.md
+  schema_file: openspec/SCHEMA.md
+  note: Follow CONVENTIONS.md for project context, terminology, platforms, and repository wiring, and SCHEMA.md for artifact structure, requirement format, Figma handling, tasks, and test scenarios.
+  repositories: "This is a documentation repository. The code lives in the git submodules listed under Connected Implementation Repositories in openspec/CONVENTIONS.md — search inside those paths, write every file path repository-qualified (submodules/<repo>/<path>), and treat an EMPTY repository path as not checked out, never as an empty codebase."
+
+# NOTE: Always wrap a rule in double quotes if it contains "#" (e.g. a "## Heading"
+# reference). In unquoted YAML, a "#" preceded by a space starts a comment, which
+# silently truncates the rule before it ever reaches `openspec instructions`.
+# Verify after editing:  python3 -c "import yaml,json;print(json.dumps(yaml.safe_load(open('openspec/config.yaml'))['rules'],indent=2))"
+rules:
+  proposal:
+    - "Name the change directory in kebab-case, prefixed with `fix-` when the change corrects broken behavior in something already built and carrying no prefix otherwise (see openspec/SCHEMA.md); rename the directory if it was already created without the prefix"
+    - Identify all platforms affected by the change and state which are in scope and which are explicitly out of scope
+    - "If the project defines an API contract (see openspec/CONVENTIONS.md) and the backend is in scope, read it and name the existing endpoints the change touches"
+    - Follow the artifact structure and formatting rules in openspec/SCHEMA.md
+  design:
+    - "If the project defines an API contract (see openspec/CONVENTIONS.md) and the backend is in scope, read it before describing any backend behavior"
+    - "State for each backend capability whether it is served by an EXISTING endpoint (name it) or requires a NEW one — do not design new API surface when an existing endpoint already covers the need"
+    - "Use the exact model and field names from the contract when referring to data that already exists; confirm a field is absent there before calling it new"
+    - "Inspect the connected repositories listed in openspec/CONVENTIONS.md before naming any file or module, and write every path repository-qualified (submodules/<repo>/<path>) — an empty repository path means the submodule is not checked out, so stop and ask rather than designing against nothing"
+    - Follow the artifact structure and formatting rules in openspec/SCHEMA.md
+  specs:
+    - "Split requirements by platform using the platform headings defined in openspec/CONVENTIONS.md"
+    - Only include sections for platforms that are in scope for the change
+    - Use the approved terminology defined in openspec/CONVENTIONS.md throughout
+    - "Backend requirements must use the exact endpoint paths, model names, and field names from the project's API contract when one exists; never invent a name that contradicts it"
+    - Follow the requirement, scenario, and Figma formatting rules in openspec/SCHEMA.md
+  tasks:
+    - "Group tasks by platform when the change touches more than one, using the platform headings defined in openspec/CONVENTIONS.md"
+    - "When the project defines an API contract, read it before writing backend tasks; every backend task must cite the endpoint or model it touches and mark it MODIFY (already in the contract) or NEW (absent from it)"
+    - "Never write a task that adds an endpoint or model field that already exists in the contract — write a MODIFY task against the existing one instead"
+    - "Repository-qualify every path a task names (submodules/<repo>/<path>) and name each platform's repository path in its heading, so no one has to guess which checkout the task belongs to"
+    - "Order tasks across repositories by dependency — the producing repository lands before its consumers, and the consuming task states what it waits on"
+    - Follow the task structure and formatting rules in openspec/SCHEMA.md

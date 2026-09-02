@@ -1,0 +1,26 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.vendor/
+
+# IDEs and editors
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
+
+# AI
+/.weave
+/.claude

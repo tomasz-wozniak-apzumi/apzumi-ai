@@ -1,0 +1,470 @@
+name: apzumi-sdd
+version: 3
+description: >
+  Apzumi's spec-driven workflow. Forked from the built-in `spec-driven` schema
+  with: a technically concrete, codebase-grounded design artifact; a manual QA
+  tests artifact; a mandatory pre-implementation review gate (the
+  "reflection" step); grounded atomic tasks; and capability-consolidation
+  behaviour in the delta specs.
+  Flow: proposal -> specs -> design -> tests -> review -> tasks -> apply.
+  v2 added knowledge preservation: tests are grouped by capability and
+  tagged Regression/One-off so the `apzumi-sync-knowledge` skill can merge
+  Regression rows into a living per-capability suite, and design's Decisions &
+  Trade-offs blocks are written to be extractable as standalone ADRs. That
+  skill runs as a separate step before archiving; archiving itself is stock
+  OpenSpec. See openspec/decisions/README.md and
+  openspec/specs/<capability-path>/tests.md (created on first sync).
+  v3 realigned with upstream spec-driven as of OpenSpec 1.9.0: the proposal
+  declares capabilities, delta specs carry `## Purpose` and support RENAMED,
+  `skip_specs` is explained, and Open Questions are held to a stricter bar.
+  v3 also splits testing into two non-overlapping layers — layer 1 acceptance
+  (tests.md, automated by the `@apzumi-generate-test-code` subagent as the
+  first task under each platform) and layer 2 unit/integration (hand-written) —
+  requires `## Test Identifiers` in design when a UI platform is in scope,
+  adds a reuse-before-create rule to design, gives apply an explicit
+  definition of done, and has proposal/specs consult the Capability Map in
+  openspec/CONVENTIONS.md so capability targeting works on a greenfield
+  project where openspec/specs/ is still empty.
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Why / what / capabilities / scope / impact of the change
+    template: proposal.md
+    instruction: |
+      Explain WHY this change is needed and WHAT changes at a high level.
+      Keep it skimmable — under ~350 words. Rules:
+        - State in-scope AND out-of-scope explicitly. The out-of-scope list is
+          what stops the change from sprawling during implementation.
+        - Name every platform affected by the change (use the platform names
+          from the project context) and which are explicitly NOT affected.
+        - Do NOT design the solution here — no APIs, no file lists, no schemas.
+        - Plain language, short bullets. No filler, no restating the obvious.
+
+      CAPABILITIES (the contract with the specs artifact — get this right):
+      Research BEFORE filling this in, from two places:
+        - `openspec list --specs` (or openspec/specs/) — what EXISTS today.
+        - The Capability Map in openspec/CONVENTIONS.md — the agreed taxonomy,
+          which on a young project names domains that have no spec yet. Target
+          a mapped capability rather than inventing a sibling for the same
+          behaviour. If the map genuinely lacks a domain this change needs, add
+          it to the map in this change rather than diverging silently.
+      Then declare:
+        - New Capabilities: capabilities being introduced. Each becomes a new
+          `specs/<capability-path>/spec.md`. `<capability-path>` is the spec
+          directory relative to `specs/` — `billing` in a flat layout, or
+          `identity/user-auth` where the project nests. Use kebab-case for any
+          segment you introduce and follow the project's existing organisation;
+          do not add a domain level when the project is flat.
+        - Modified Capabilities: existing capabilities whose REQUIREMENTS
+          change (not merely their implementation). Use the exact existing path
+          under openspec/specs/. Leave empty if no requirement changes.
+      Prefer extending an existing capability over minting a new one, and
+      prefer coarse domain-level names (admin, billing, auth) over
+      feature-level ones (admin-list, admin-filtering).
+
+      Every change must either declare at least one capability or explicitly
+      opt out: `openspec validate` REJECTS a change with zero deltas unless the
+      change's `.openspec.yaml` sets `skip_specs: true`. Use `skip_specs: true`
+      only when no spec-level behaviour changes at all — a pure refactor,
+      tooling, or docs change. Never invent a requirement just to satisfy
+      validation.
+    requires: []
+
+  - id: specs
+    generates: specs/**/*.md
+    description: Delta specs (ADDED / MODIFIED / REMOVED / RENAMED) per capability
+    template: spec.md
+    instruction: |
+      Author delta specs as requirement/scenario changes, not prose.
+
+      CAPABILITY SELECTION:
+        - Create one spec file per capability listed in the proposal's
+          Capabilities section, at `specs/<capability-path>/spec.md`. Preserve
+          the full path: a new capability uses the exact path the proposal
+          declared; a modified capability uses the exact existing path from
+          openspec/specs/. Never move or rename a capability here.
+        - If the proposal's Capabilities section looks wrong — it misses a
+          capability, or mints a new one where an existing capability or a
+          domain in CONVENTIONS.md's Capability Map clearly fits — fix the
+          proposal first rather than silently diverging. The two artifacts
+          must agree.
+        - On a greenfield project openspec/specs/ is empty, so the Capability
+          Map is the only taxonomy there is. Follow it; do not improvise a
+          parallel naming scheme because nothing exists to compare against.
+        - There must be at least one spec file unless the change's
+          `.openspec.yaml` sets `skip_specs: true`; `openspec validate` rejects
+          a zero-delta change without that marker.
+
+      PURPOSE:
+        - A delta for a NEW capability MUST open with a `## Purpose` section:
+          one or two sentences (50+ characters, or `openspec validate --strict`
+          reports it as too brief) on what the capability is for. Archive
+          copies it into the main spec it creates; without it the new main spec
+          is left with a TBD placeholder someone has to fix by hand.
+        - Do NOT add `## Purpose` to a delta for an EXISTING capability — that
+          spec already has one and the delta's is ignored. To change it, edit
+          openspec/specs/<capability-path>/spec.md directly.
+
+      DELTA DISCIPLINE:
+        - ADDED: a brand-new requirement.
+        - MODIFIED: paste the FULL updated requirement (header + ALL scenarios).
+          A partial delta silently drops previous detail at archive time. Use
+          MODIFIED only when you are actually changing existing behaviour; for a
+          new concern on an existing capability, use ADDED instead.
+        - REMOVED: include a Reason and a Migration note.
+        - RENAMED: name changes only, in FROM:/TO: format. Use this rather than
+          a REMOVED+ADDED pair, which loses the requirement's history and
+          merges worse at archive.
+
+      REQUIREMENT FORMAT:
+        - Every requirement uses SHALL/MUST and carries at least one concrete,
+          testable scenario. Scenario headings use EXACTLY four hashes
+          (`#### Scenario:`) — three hashes or a bullet fails silently.
+        - Scenario steps are bold bullets: `- **WHEN** ...` / `- **THEN** ...`,
+          with `- **AND**` only where it adds clarity.
+        - Scenarios are the contract the coding agent implements against —
+          observable, not vague. Avoid "easy", "fast", "robust", "seamless"
+          unless paired with a measurable criterion.
+        - Keep implementation details out unless externally observable or
+          contractually required.
+
+      PLATFORM SECTIONS (multi-platform changes only):
+        - Split requirements by platform using the exact platform names from
+          the project context. Inside delta sections (## ADDED/MODIFIED/
+          REMOVED/RENAMED Requirements) mark platforms with bold text (e.g.
+          **Frontend**), not headings — headings there break delta validation.
+        - Only include platforms that are in scope for this change.
+
+      FIGMA (UI-facing specs only):
+        - Every spec covering a UI platform MUST start with a blockquote:
+          `> Figma: <screen or flow label> — <url>`.
+        - NEVER invent, guess, reuse, or carry over a Figma URL. If the user
+          has not provided one for this specific screen, ask for it. If none
+          exists, state: `> Figma: Not available — confirmed by <source/date>`.
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: Technical design, grounded in the real codebase
+    template: design.md
+    instruction: |
+      Explain HOW to implement, grounded in the ACTUAL codebase. Inspect it
+      first (Grep/Glob/Read) and reference REAL file paths, modules, and types.
+      Every section must be concrete enough for a coding agent to act without
+      guessing.
+
+      REUSE BEFORE CREATE — the code-level twin of the capability rule in the
+      specs artifact. Before proposing any new module, service, helper, or
+      utility, look for one that already covers the need:
+        - Do not propose a new service when an existing one owns that domain;
+          extend it and name it.
+        - Do not add a helper that duplicates something already in the
+          project's shared/common area — find it and reuse it.
+        - Follow the patterns the codebase already uses. If you deviate, say
+          why in Decisions & Trade-offs; an unexplained new pattern is a defect.
+        - When extending something existing, name the file you are extending.
+          "A new X is needed" is only acceptable after you have looked.
+
+      Cover, at minimum:
+        - Approach and hard constraints (perf, compatibility, security).
+        - API Surface: each endpoint/contract to CREATE or CONSUME — method,
+          path, request/response shape, status codes; or, for internal work,
+          module + function signatures.
+        - Existing API Impact: when the project has an external API contract
+          (e.g. an OpenAPI doc named in the project context), read it first and
+          state per backend capability whether it is served by an EXISTING
+          endpoint (name it), an existing one needing EXTENSION (name the field
+          added), or genuinely NEW. Never assume an endpoint, DTO, or field is
+          new without checking.
+        - Data Model & Migrations: models/tables/types added or changed, the
+          migration outline, and any backfill.
+        - Modules & Files: an explicit list, split into CREATE vs MODIFY, with
+          the purpose of each.
+        - Integration Points: external services, events/queues, feature flags.
+        - Flow: a short sequence for any cross-module or async interaction.
+        - Test Identifiers: REQUIRED when a UI platform is in scope. Name the
+          stable, unique identifier for every element the acceptance scenarios
+          interact with or assert on — `data-testid` for web, accessibility
+          identifiers for iOS/Android (Maestro matches on those). Give the
+          exact id strings, not a naming policy, because the generated E2E
+          tests are written against them BEFORE the UI exists; an id invented
+          later by the implementer silently breaks the test. Ids must be
+          stable: never derive one from copy, position, or a generated class.
+        - Testing Strategy: state the two layers separately —
+          layer 1 (acceptance/E2E, generated from tests.md by
+          `@apzumi-generate-test-code`) and layer 2 (unit & integration,
+          hand-written). Map each to the spec scenarios it verifies, and keep
+          them disjoint: anything an E2E test asserts should not be re-asserted
+          by a unit or integration test at the same level.
+        - Decisions & Trade-offs: ADR-style — decision, alternatives, why,
+          consequences. This is the part worth preserving: before the change
+          is archived, each block is extracted verbatim into its own ADR under
+          openspec/decisions/. Write each block SELF-CONTAINED and TITLED
+          (the title becomes the ADR title) so it stands alone without the
+          rest of design.md. Only include a block here for a decision that
+          would still matter to someone reading it in a year — a real
+          trade-off with alternatives considered. Routine implementation
+          choices belong in Approach, not here; don't inflate this section
+          just to have entries.
+        - Risks & Mitigations.
+        - Assumptions: anything you took as true without confirming, that a
+          reader would need to know to judge the design. Distinct from Open
+          Questions — an assumption is a decision you made and moved on from,
+          an open question is still unanswered. Omit if there are none.
+        - Figma: list every relevant Figma file (never invent a URL; ask), or
+          state that none apply.
+      Do NOT restate requirements — reference them.
+
+      SKIP_SPECS CHANGES: on a change whose `.openspec.yaml` sets
+      `skip_specs: true` (pure refactor, tooling, docs), keep only the sections
+      above that genuinely apply — usually Approach, Modules & Files, Risks,
+      and any real Decisions & Trade-offs. Delete the rest rather than filling
+      them with "N/A"; a refactor has no API surface or data model to describe.
+
+      OPEN QUESTIONS — hold these to a strict bar. An Open Question is a
+      genuinely deferrable unknown that can be answered later WITHOUT changing
+      the specs, the approach, or the task breakdown. It is not a decision you
+      skipped. If a question would change any of those three, resolve it now —
+      ask the user rather than guessing, or fix the specs. The one thing that
+      always belongs here: something you could not ground in a real file or
+      contract. Record that as an Open Question rather than inventing a
+      plausible path. Omit the section entirely if there is nothing to record.
+
+      Style: short bullets over prose; every sentence must earn its place. A
+      developer should be able to parse any section in under a minute.
+    requires:
+      - proposal
+      - specs
+
+  - id: tests
+    generates: tests.md
+    description: Manual QA test scenarios for the whole change
+    template: tests.md
+    instruction: |
+      Produce the ACCEPTANCE test plan for this change: black-box scenarios
+      written from a manual tester's perspective.
+
+      This file is layer 1 of two, and the distinction matters because the two
+      layers are produced differently and must not overlap:
+        - LAYER 1 — Acceptance (this file). Black-box, externally observable
+          behaviour only. A tester can execute it by hand today, and
+          `@apzumi-generate-test-code` turns its Regression rows into automated
+          E2E tests (Playwright, Maestro, or the project's framework).
+        - LAYER 2 — Unit & integration. White-box, hand-written as ordinary
+          tasks in tasks.md from the spec scenarios and design.md's Testing
+          Strategy. It covers what acceptance tests cannot reach: pure-function
+          edge cases, internal error branches, boundary values, resource
+          handling.
+      Never write a layer-2 concern here. If a check needs internal state to
+      observe, it does not belong in this file.
+
+      SKIP_SPECS CHANGES: if the change's `.openspec.yaml` sets
+      `skip_specs: true` there are no capabilities and no behaviour to test.
+      OpenSpec only auto-completes artifacts that generate into `specs/`, so
+      this one is still asked for — write exactly one line and stop:
+      `Not applicable — this change declares skip_specs (no spec-level
+      behaviour change).` Do NOT invent capability sections or scenarios to
+      fill the file.
+
+      Otherwise, the rules:
+        - ONE tests.md per change (not per spec), at the change root.
+        - Group scenarios by CAPABILITY, using the same capability paths as the
+          delta specs under specs/ — not ad-hoc "feature area" labels. Write
+          the full path where the project nests (`## identity/user-auth`).
+          This is what lets the knowledge-sync step merge each group into that
+          capability's own living regression suite before archiving.
+        - Each scenario is a table row: `#`, `Scenario`, `Steps`,
+          `Expected Result`, `Type`. Number sequentially across the whole file
+          (T1, T2, T3, ...).
+        - TYPE is either `Regression` or `One-off`:
+          - Regression: asserts behaviour that must keep holding after this
+            change ships — this is the default for anything derived from a
+            spec scenario.
+          - One-off: only meaningful once, tied to this specific change (e.g.
+            "verify the backfill migrated all existing rows", "confirm the
+            feature flag defaults off in prod"). Only Regression rows survive
+            archival; tag conservatively — mistagging a durable behavioural
+            check as One-off silently drops it from the permanent suite.
+        - When this change REMOVES or MODIFIES a requirement, say so in a
+          `## Retired scenarios` section at the end: list the living-suite IDs
+          (e.g. `AUTH-T4`) that no longer apply, with one line of reason. The
+          knowledge sync uses this to retire stale rows from the permanent
+          suite — without it, the suite keeps testing behaviour you deleted.
+        - Cover every platform and backend flow in scope, including error
+          paths and permission/role differences from the spec scenarios.
+        - Describe ONLY observable behaviour: UI, API responses, notifications,
+          files, reports, logs available to testers. Never internal
+          service-to-service payloads, private database state, or invisible
+          background processing — unless surfaced through an observable result.
+        - Translate requirements into executable test steps; do not paste
+          requirement text.
+      Manual QA execution stays here — it never becomes tasks in tasks.md.
+    requires:
+      - specs
+      - design
+
+  - id: review
+    generates: review.md
+    description: Mandatory pre-implementation review gate (reflection)
+    template: review.md
+    instruction: |
+      This artifact GATES implementation. Do not proceed to tasks/apply until it
+      records a PASS verdict.
+
+      Invoke the independent `@apzumi-openspec-reviewer` subagent (read-only critic,
+      running on a different model tier than the authoring agent) to audit
+      proposal.md, the delta specs, design.md, and tests.md AGAINST
+      the existing system in openspec/specs/ and the real codebase. This
+      includes archival readiness: every Decisions & Trade-offs block in
+      design.md must be self-contained and titled (it becomes an ADR
+      verbatim), and every tests.md row must carry a defensible
+      Regression/One-off Type (Regression rows become the permanent suite —
+      mistagging one as One-off silently drops it). Record findings here,
+      grouped by severity (🔴 Blocking / 🟡 Should-fix / 💡 Suggestion), with
+      exact locations and the reason each issue would cause rework.
+
+      Then run the fix loop: fix every 🔴 in the artifact it belongs to, re-invoke
+      `@apzumi-openspec-reviewer`, and append a new round to this file. Repeat until no
+      🔴 remain (hard cap: 5 rounds), then write the final Verdict line:
+      PASS, or ESCALATED-TO-HUMAN if the cap was hit with 🔴 outstanding.
+
+      On a `skip_specs` change the reviewer audits what exists (proposal and
+      design — tasks.md is written after this gate) and should not treat the
+      absent specs or the one-line tests.md as defects.
+
+      An empty or rubber-stamped review is invalid. Never modify code here.
+    requires:
+      - proposal
+      - specs
+      - design
+      - tests
+
+  - id: tasks
+    generates: tasks.md
+    description: Codebase-grounded, atomic implementation checklist
+    template: tasks.md
+    instruction: |
+      Produce an ordered checklist a coding agent can execute mechanically.
+
+      Before writing tasks, check design.md for Open Questions. If any of them
+      would change what gets built, resolve them with the user first — do not
+      bake an unstated assumption into the task list.
+
+      Ground it: inspect the modules named in design.md first, so every task
+      names a REAL file path. Rules:
+        - Each task MUST be a checkbox `- [ ] X.Y ...` under a `##` numbered
+          group heading — the apply phase parses this format to track progress,
+          and a task in any other shape is not tracked.
+        - One task = one logical commit. No task should produce a diff a
+          reviewer cannot skim.
+        - Format each: "<verb> <specific/file/path> — <acceptance/verification>"
+          and tag the spec requirement it satisfies for traceability.
+        - Never let "implement", "support", "improve", "enhance", or "refactor"
+          stand as the whole of a task's verb. Either say what observably
+          changes, or pair the verb with a concrete acceptance criterion. A
+          task a coding agent can satisfy in several incompatible ways is
+          underspecified.
+        - A task that CREATES a file states its full target path AND the
+          registration or wiring step that makes it reachable — a module
+          import, a route entry, a DI registration, an export barrel. An
+          unregistered new file is dead code that still passes review.
+        - Order strictly by dependency: shared types, models, and migrations
+          come before their consumers.
+        - When the change spans platforms, group tasks under a heading per
+          platform (exact platform names from the project context); only
+          include platforms in scope. Cross-cutting/shared setup goes first.
+        - Automated tests are their own numbered tasks, and there are exactly
+          TWO kinds. Label every test task so which kind it is can be seen at
+          a glance, and never let them overlap:
+          - `**[E2E automation]**` — layer 1. Generated from tests.md by
+            `@apzumi-generate-test-code`. One such task, first, under each
+            platform (see below). Do not hand-write these.
+          - `**[Unit]**` / `**[Integration]**` — layer 2. Hand-written, grouped
+            in a final `## N. Unit & integration tests (white-box)` section.
+            They come from the spec scenarios and design.md's Testing Strategy,
+            NOT from tests.md, and must cover only what an E2E test cannot
+            reach: pure-function edge cases, internal error branches, boundary
+            values, resource handling. If a layer-2 task would assert the same
+            thing an E2E test already asserts, drop it — that is duplication,
+            not depth.
+        - Do NOT include manual QA execution or generic verification tasks —
+          manual testing lives in tests.md.
+        - No task may touch files outside this change's scope.
+
+      TEST CODE GENERATION — the first task under each platform:
+        - When the change has a tests.md carrying Regression rows, the FIRST
+          task under each platform heading MUST generate that platform's
+          automated test code from those scenarios, before any implementation
+          task for that platform. Shared/cross-cutting setup groups still come
+          before the platform sections; this rule orders within a platform.
+        - DELEGATE it. The task's action is to invoke
+          `@apzumi-generate-test-code` (a separate subagent owned outside this
+          workflow), naming the platform, the framework from the project
+          context, and the T-numbers it covers. Never write test code inline
+          in tasks.md, and never expand the scenarios into steps here.
+        - Prefix the task `**[E2E automation]**` so it is visibly distinct from
+          the layer-2 test tasks in the final group.
+        - Cover Regression rows ONLY. One-off scenarios are one-time checks
+          (migration backfills, post-deploy verifications) and must not become
+          permanent automated tests.
+        - tests.md is grouped by capability but tasks are grouped by platform:
+          assign each scenario to the platform that can actually exercise it,
+          and say so in the task. A scenario no platform can automate (a manual
+          inspection, an external system) is simply left out — note it in the
+          task rather than inventing a test for it.
+        - ACCEPTANCE is that the generated tests exist and RUN, failing because
+          the feature is absent. They are not expected to pass: the
+          implementation tasks that follow are what turn them green. Do not
+          mark the task complete on a passing suite, and do not weaken a
+          generated test to make it pass.
+        - Selectors, test ids, routes, and screen names the tests need do not
+          exist yet. Take them from design.md — if design.md does not name
+          them, the generated tests will need a second pass, so prefer to fix
+          design.md first.
+        - SKIP this task for a platform with no automatable scenarios (e.g.
+          Shared infrastructure), and for a `skip_specs` change.
+        - This does NOT replace the layer-2 tasks in the final unit &
+          integration group. tests.md describes only externally observable
+          behaviour, so it can drive end-to-end/UI-level tests and nothing
+          deeper.
+    requires:
+      - specs
+      - design
+      - review
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+  instruction: |
+    Read the change's artifacts, work through pending tasks in order, and mark
+    each complete as you go. Pause if you hit a blocker or need clarification.
+
+    Ground every edit: design.md names the real files and contracts, and the
+    project context may name an API source of truth — re-read it before
+    implementing a backend task rather than trusting the artifact alone. If the
+    code contradicts an artifact (an endpoint marked NEW already exists, a
+    named file is gone), STOP and report the contradiction instead of
+    implementing around it — the artifacts need correcting first.
+
+    Stay inside the task you are on. Do not fix unrelated things you notice in
+    passing, do not widen a task's scope, and preserve the architectural
+    decisions design.md records — if one looks wrong, say so rather than
+    quietly departing from it. Prefer the smallest change that satisfies the
+    task.
+
+    A TASK IS NOT COMPLETE until all of these hold — check before ticking the
+    box, not after:
+      - its acceptance criterion is satisfied, as written;
+      - its validation passes (the tests, type check, lint, or build the task
+        names — actually run them, do not assume);
+      - the deliverable exists where the task said it would;
+      - nothing that passed before now fails.
+    If you cannot satisfy one of those, leave the box unchecked and report why.
+    An unchecked task with a reason is useful; a checked task that does not
+    hold is worse than no task at all.
+
+    Do not run manual QA from tests.md here, and do not archive.
+    When the tasks are done, the next steps are `/apzumi-sync-knowledge` and
+    then normal OpenSpec archiving.

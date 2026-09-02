@@ -1,0 +1,5 @@
+# Claude Code local state — per-developer, never shared
+.claude/settings.local.json
+
+# OpenSpec/editor noise
+.DS_Store

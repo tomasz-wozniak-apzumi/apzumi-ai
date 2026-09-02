@@ -1,0 +1,45 @@
+name: OpenSpec
+
+# Runs the two validators on every PR that touches specs, changes, or the
+# schema. `openspec validate` covers what OpenSpec understands; the conventions
+# checker covers what it doesn't (review gate, scenario typing, suite IDs,
+# ADR log).
+on:
+  pull_request:
+    paths:
+      - 'openspec/**'
+      - 'scripts/apzumi-validate.mjs'
+      - '.claude/agents/**'
+      - '.claude/skills/apzumi-**'
+      - '.github/workflows/openspec-validate.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'openspec/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenSpec
+        # Pinned to the major this schema was validated against. A new major
+        # can change schema or validation semantics, and CI silently tracking
+        # it would diverge from what developers run locally. Bump deliberately,
+        # following SETUP.md "Upstream sync".
+        run: npm install -g '@fission-ai/openspec@^1.9.0'
+
+      - name: Validate the workflow schema
+        run: openspec schema validate apzumi-sdd
+
+      - name: Validate specs and changes
+        run: openspec validate --all --strict
+
+      - name: Validate apzumi-sdd conventions
+        run: node scripts/apzumi-validate.mjs
