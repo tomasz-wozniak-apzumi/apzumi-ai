@@ -379,12 +379,15 @@ function checkQaDecisions(root) {
 
     // Approval is two fields, filled together, by a person.
     const by = /^\*\*Approved by:\*\*[ \t]*(.*?)[ \t]*\*\*on:\*\*[ \t]*(.*?)[ \t]*$/m.exec(text);
+    // A malformed signature line must not disable the rest of the file's checks.
+    // It is the likeliest thing for a tester to get wrong by hand, and the row
+    // checks below are exactly what they need most at that moment.
     if (!by) {
-      warn(where, 'no "**Approved by:** **on:**" line - a tester has nowhere to sign');
-      continue;
+      warn(where, 'no "**Approved by:** **on:**" line - a tester has nowhere to sign. ' +
+        'Both markers stay; the values go beside them');
     }
-    const approvedBy = by[1].trim();
-    const approvedOn = by[2].trim();
+    const approvedBy = by ? by[1].trim() : '';
+    const approvedOn = by ? by[2].trim() : '';
     if (Boolean(approvedBy) !== Boolean(approvedOn)) {
       error(where, `approval is half-filled (by: "${approvedBy}", on: "${approvedOn}") - ` +
         'fill both or neither, so a signature is never ambiguous');
