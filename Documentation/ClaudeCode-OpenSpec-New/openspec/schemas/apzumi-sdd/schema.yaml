@@ -458,11 +458,15 @@ artifacts:
                                    attached (a developer running this task
                                    normally has no phone connected)
             unverified: no build   nothing servable to run against yet
+          Either `unverified` still requires every static check the framework
+          offers to have passed — syntax validation, lint, type check. "Syntax
+          valid, not executed" is an honest state; "not checked" is not.
           The task is complete on any of the three, because a test that cannot
           be run is still a test that exists — but the outcome is recorded, so
           "not checked" never passes for "checked". A passing suite is NOT
-          acceptance: it means the test proves nothing. Never weaken a
-          generated test to make it pass.
+          acceptance: a new test that passes before the feature exists asserts
+          something that was already true. Never weaken a generated test to
+          make it pass.
         - Selectors, test ids, routes, and screen names the tests need do not
           exist yet. Take them from design.md's `## Test Identifiers` — if it
           does not name one, stop and fix design.md rather than inventing a

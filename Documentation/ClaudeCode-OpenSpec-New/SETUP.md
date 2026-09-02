@@ -96,10 +96,12 @@ does not exist, this is why: they are on the `core` profile.
         from reading product code: an agent that reads the implementation
         writes scenarios the implementation already satisfies. It never fills
         in `Approved by`, `on`, or a `Decision` — those are a person's.
-      - `apzumi-generate-test-code.md` — E2E generation, currently a
-        **placeholder** that refuses and reports. It carries `Bash` because
-        its contract is to run the suite and prove the tests fail for the
-        right reason, so review its tool list before implementing it.
+      - `apzumi-generate-test-code.md` — E2E generation for one platform,
+        from the rows a tester assigned to its framework. It carries `Bash`
+        because its contract is to run what it wrote and prove it fails for
+        the right reason; keep that list narrow — no git, no product build.
+        It never reads `tasks.md`, which is what makes "the test was written
+        first" mean anything.
 - [ ] Restart Claude Code — subagents and skills are loaded at session start.
 - [ ] Confirm `.claude/skills/apzumi-sync-knowledge/SKILL.md` is present. It
       updates the living regression suite and ADR log, and deliberately does
