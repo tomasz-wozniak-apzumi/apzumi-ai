@@ -101,6 +101,39 @@ requirements.
 
 ---
 
+## Test Automation
+
+<!-- The wiring between a platform, the framework that tests it, and where that
+     code lives. Fill this in at setup; delete rows that do not apply.
+
+     This table is load-bearing, not documentation. tests.md groups scenarios by
+     capability while tasks.md groups tasks by platform, so a row's `Platforms`
+     cell plus this table are what tell the generation task under a platform
+     which scenarios are its own and which runner to write them for. The
+     conventions checker reads it: the framework named here is what a tester's
+     `Decision` value must match.
+
+     A platform with no framework is a legitimate row — say so explicitly, with
+     the consequence. "No stack" recorded here turns a scenario needing that
+     platform into a blocker someone sees, rather than a test nobody wrote. -->
+
+| Platform | Framework | Test root | Runner | Notes |
+|---|---|---|---|---|
+| `<Platform>` | `<framework>` | `<path/to/tests>` | `<command>` | `<preconditions, cost, anything a runner needs>` |
+| `<Platform>` | — | — | — | `<why there is no stack, and what that means for scenarios needing it>` |
+
+Runtime detail — roots, runners, preflight, forbidden patterns — belongs in the
+project's automation config, and product facts (URLs, credentials, seeds) in its
+QA config. This table is the contract; those files are the configuration.
+
+**Execution policy.** State plainly when tests run: on demand, on a schedule,
+never per push. Say what a run costs where it costs something — paid device
+minutes are the usual case — because that cost is why the policy exists. Say
+where a run's result is committed, since a result that only lives in an
+expiring CI artifact cannot answer "was this tested, and when".
+
+---
+
 ## Backend API Reference
 
 <!-- Where the authoritative API contract lives and when to read it. Delete

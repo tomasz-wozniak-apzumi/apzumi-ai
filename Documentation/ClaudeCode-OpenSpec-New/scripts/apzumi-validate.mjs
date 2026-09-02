@@ -150,6 +150,24 @@ function checkReviewGate(root) {
     }
     const lines = readText(reviewPath).split('\n').map((l) => l.trim()).filter(Boolean);
     const verdict = lines.length ? lines[lines.length - 1] : '';
+
+    // The scenarios half of the same gate. A PASS recorded over an unsigned
+    // tests.md means implementation is about to start against test scenarios
+    // nobody agreed to — which is the thing making tests a real artifact was
+    // meant to prevent. Reported here rather than in the QA checks because it
+    // is the gate, not the file, that is wrong.
+    const testsPath = join(changeDir, 'tests.md');
+    if (verdict === 'PASS' && existsSync(testsPath)) {
+      const tt = stripComments(readText(testsPath));
+      const by = /^\*\*Approved by:\*\*[ \t]*(.*?)[ \t]*\*\*on:\*\*[ \t]*(.*?)[ \t]*$/m.exec(tt);
+      const signed = Boolean(by && by[1].trim() && by[2].trim());
+      const hasRows = /^\|\s*T\d+\s*\|/m.test(tt);
+      if (hasRows && !signed) {
+        error(where, 'review.md records PASS but tests.md carries no approval — ' +
+          'the gate covers the scenarios too, or implementation starts on scenarios nobody signed');
+      }
+    }
+
     if (verdict === 'PASS') continue;
     if (verdict.startsWith('ESCALATED-TO-HUMAN')) {
       warn(where, 'review.md ended ESCALATED-TO-HUMAN — a human must decide before apply');
@@ -297,6 +315,163 @@ function taskGroups(text) {
   return groups;
 }
 
+/** Platform -> framework, from CONVENTIONS.md's Test Automation table. */
+function readFrameworks(root) {
+  const conv = join(root, 'openspec', 'CONVENTIONS.md');
+  const map = new Map();
+  if (!existsSync(conv)) return map;
+  const body = sections(stripComments(readText(conv)))['Test Automation'] ?? '';
+  for (const cells of tableRows(body)) {
+    const platform = (cells[0] ?? '').replace(/`/g, '').trim();
+    const framework = (cells[1] ?? '').replace(/`/g, '').trim();
+    if (!platform || platform.includes('<')) continue;
+    // An em dash is a deliberate "no stack here", not a missing value.
+    const usable = framework && !framework.includes('<') && framework !== '—';
+    map.set(platform, usable ? framework.toLowerCase() : null);
+  }
+  return map;
+}
+
+const AUTOMATION_VALUES = new Set(['automation_candidate', 'manual_only', 'needs_human_decision']);
+
+/**
+ * Parse a Decision cell into platform -> value.
+ *
+ * A row on one platform carries a bare value; a row spanning several carries
+ * `Web: playwright · Mobile Android: manual`, because "automate here, do it by
+ * hand there" is a normal answer that one value cannot express.
+ */
+function parseDecision(cell, platformsInRow) {
+  const raw = (cell ?? '').replace(/`/g, '').trim();
+  if (!raw) return { error: 'is empty' };
+  if (!raw.includes(':')) {
+    const v = raw.toLowerCase();
+    return { byPlatform: new Map(platformsInRow.map((pf) => [pf, v])), bare: v };
+  }
+  const byPlatform = new Map();
+  for (const part of raw.split('·')) {
+    const m = /^\s*(.+?)\s*:\s*(.+?)\s*$/.exec(part);
+    if (!m) return { error: 'has an unparseable part "' + part.trim() + '" - expected "<Platform>: <value>"' };
+    byPlatform.set(m[1].trim(), m[2].trim().toLowerCase());
+  }
+  return { byPlatform };
+}
+
+/**
+ * The QA half of tests.md: approval, the values a tester may write, and the
+ * platform names a row may claim. This is what OpenSpec cannot know and what
+ * the schema can only ask for politely.
+ */
+function checkQaDecisions(root) {
+  const changesDir = join(root, 'openspec', 'changes');
+  const platforms = readPlatforms(root);
+  const frameworks = readFrameworks(root);
+  const knownFrameworks = [...frameworks.values()].filter(Boolean);
+  const knownDecisions = new Set(['manual', 'pending', ...knownFrameworks]);
+
+  for (const name of listDirs(changesDir)) {
+    if (name === 'archive') continue;
+    const changeDir = join(changesDir, name);
+    const testsPath = join(changeDir, 'tests.md');
+    if (!existsSync(testsPath)) continue;
+    const where = `changes/${name}/tests.md`;
+    const text = stripComments(readText(testsPath));
+
+    // Approval is two fields, filled together, by a person.
+    const by = /^\*\*Approved by:\*\*[ \t]*(.*?)[ \t]*\*\*on:\*\*[ \t]*(.*?)[ \t]*$/m.exec(text);
+    if (!by) {
+      warn(where, 'no "**Approved by:** **on:**" line - a tester has nowhere to sign');
+      continue;
+    }
+    const approvedBy = by[1].trim();
+    const approvedOn = by[2].trim();
+    if (Boolean(approvedBy) !== Boolean(approvedOn)) {
+      error(where, `approval is half-filled (by: "${approvedBy}", on: "${approvedOn}") - ` +
+        'fill both or neither, so a signature is never ambiguous');
+    }
+    if (approvedBy && /^@|agent|assistant|claude|skill|apzumi-/i.test(approvedBy)) {
+      error(where, `"Approved by: ${approvedBy}" names a tool, not a person - ` +
+        'the gate exists so the thing being reviewed cannot sign for it');
+    }
+    const approved = Boolean(approvedBy && approvedOn);
+
+    for (const [cap, body] of Object.entries(sections(text))) {
+      if (!cap || cap === 'Retired scenarios' || cap.startsWith('Notes')) continue;
+      const typeIdx = columnIndex(body, 'Type');
+      const platIdx = columnIndex(body, 'Platforms');
+      const autoIdx = columnIndex(body, 'Automation');
+      const decIdx = columnIndex(body, 'Decision');
+      // A plain manual plan carries none of these; it is not this format and
+      // not this check's business.
+      if (decIdx === -1 && platIdx === -1 && autoIdx === -1) continue;
+
+      for (const cells of tableRows(body)) {
+        const tid = (cells[0] ?? '').replace(/`/g, '').trim();
+        // checkChangeTests already reports a malformed id; do not double-report.
+        if (!/^T\d+$/.test(tid)) continue;
+        const type = typeIdx !== -1 ? cells[typeIdx] : '';
+
+        const rowPlatforms = platIdx !== -1
+          ? (cells[platIdx] ?? '').split(',').map((x) => x.replace(/`/g, '').trim()).filter(Boolean)
+          : [];
+        if (platIdx !== -1 && !rowPlatforms.length) {
+          error(where, `[${cap}] ${tid} names no platform - the generation task cannot tell whose row it is`);
+        }
+        for (const pf of rowPlatforms) {
+          if (platforms.length && !platforms.includes(pf)) {
+            error(where, `[${cap}] ${tid} claims platform "${pf}", which is not in ` +
+              `CONVENTIONS.md's Platform Architecture table (${platforms.join(', ') || 'empty'})`);
+          }
+        }
+
+        if (autoIdx !== -1) {
+          const a = (cells[autoIdx] ?? '').replace(/`/g, '').trim();
+          if (!AUTOMATION_VALUES.has(a)) {
+            error(where, `[${cap}] ${tid} has Automation "${a}", expected one of ` +
+              [...AUTOMATION_VALUES].join(', '));
+          }
+        }
+
+        if (decIdx === -1) continue;
+        const parsed = parseDecision(cells[decIdx], rowPlatforms);
+        if (parsed.error) {
+          error(where, `[${cap}] ${tid} Decision ${parsed.error}`);
+          continue;
+        }
+
+        for (const [pf, value] of parsed.byPlatform) {
+          if (knownFrameworks.length && !knownDecisions.has(value)) {
+            error(where, `[${cap}] ${tid} Decision "${value}" for ${pf} is neither "manual", ` +
+              '"pending", nor a framework in CONVENTIONS.md\'s Test Automation table ' +
+              `(${[...knownDecisions].join(', ')})`);
+          }
+          if (rowPlatforms.length && !rowPlatforms.includes(pf)) {
+            error(where, `[${cap}] ${tid} decides for platform "${pf}", which the row's ` +
+              'Platforms cell does not list');
+          }
+        }
+        if (!parsed.bare) {
+          for (const pf of rowPlatforms) {
+            if (!parsed.byPlatform.has(pf)) {
+              error(where, `[${cap}] ${tid} lists platform "${pf}" but decides nothing for it - ` +
+                'a per-platform Decision must cover every platform the row claims');
+            }
+          }
+        }
+
+        if (approved && type === 'Regression') {
+          for (const [pf, value] of parsed.byPlatform) {
+            if (value === 'pending') {
+              error(where, `[${cap}] ${tid} is still "pending" for ${pf} in a file signed by ` +
+                `${approvedBy} - approval is file-level, so signing means every Regression row was decided`);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 const E2E_LABEL = /\[E2E automation\]/;
 
 function checkE2eFirst(root, exemptPlatforms) {
@@ -371,6 +546,90 @@ function checkE2eFirst(root, exemptPlatforms) {
       warn(where, `change has ${regressionRows} Regression scenario(s) but no ` +
         '[E2E automation] task, and no group matched a platform in CONVENTIONS.md — ' +
         'fill the Platform Architecture table so this can be checked properly');
+    }
+
+    checkE2eCoverage(root, name, changeDir, groups, platforms);
+  }
+}
+
+/** T-numbers sorted numerically: "T2" before "T10", which .sort() gets wrong. */
+function byTNumber(ids) {
+  return [...ids].sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
+}
+
+/**
+ * A tester's decision and what gets generated must be the same set.
+ *
+ * Nothing linked the two before: a row could read `manual` and a task generate
+ * it anyway, or read `playwright` and no task cover it. The first overrides a
+ * human decision, the second loses coverage someone asked for, and both are
+ * silent.
+ */
+function checkE2eCoverage(root, name, changeDir, groups, platforms) {
+  const frameworks = readFrameworks(root);
+  if (!frameworks.size || !platforms.length) return;
+
+  const where = `changes/${name}/tasks.md`;
+  const testsText = stripComments(readText(join(changeDir, 'tests.md')));
+
+  // platform -> { decided: Set<T>, manual: Set<T> }, from tests.md
+  const perPlatform = new Map();
+  for (const [cap, body] of Object.entries(sections(testsText))) {
+    if (!cap || cap === 'Retired scenarios' || cap.startsWith('Notes')) continue;
+    const typeIdx = columnIndex(body, 'Type');
+    const platIdx = columnIndex(body, 'Platforms');
+    const decIdx = columnIndex(body, 'Decision');
+    if (platIdx === -1 || decIdx === -1) return; // not this format; nothing to cross-check
+
+    for (const cells of tableRows(body)) {
+      const tid = (cells[0] ?? '').replace(/`/g, '').trim();
+      if (!/^T\d+$/.test(tid)) continue;
+      // One-off rows are never automated, whatever the decision says.
+      if (typeIdx !== -1 && cells[typeIdx] !== 'Regression') continue;
+      const rowPlatforms = (cells[platIdx] ?? '').split(',')
+        .map((x) => x.replace(/`/g, '').trim()).filter(Boolean);
+      const parsed = parseDecision(cells[decIdx], rowPlatforms);
+      if (parsed.error) continue; // already reported by checkQaDecisions
+      for (const [pf, value] of parsed.byPlatform) {
+        if (!perPlatform.has(pf)) perPlatform.set(pf, { decided: new Set(), manual: new Set() });
+        const bucket = perPlatform.get(pf);
+        if (value === frameworks.get(pf)) bucket.decided.add(tid);
+        else if (value === 'manual') bucket.manual.add(tid);
+      }
+    }
+  }
+  if (!perPlatform.size) return;
+
+  for (const [pf, bucket] of perPlatform) {
+    const group = groups.find((g) =>
+      new RegExp(`\\b${pf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(g.title));
+    const e2eTasks = group ? group.tasks.filter((x) => E2E_LABEL.test(x)) : [];
+    const covered = new Set();
+    for (const task of e2eTasks) for (const m of task.matchAll(/\bT\d+\b/g)) covered.add(m[0]);
+
+    if (bucket.decided.size && !e2eTasks.length) {
+      error(where, `${byTNumber(bucket.decided).join(', ')} were assigned to ` +
+        `${frameworks.get(pf)} for ${pf}, but there is no [E2E automation] task under that ` +
+        'platform — a decision to automate that generates nothing is worse than no decision');
+      continue;
+    }
+    if (!e2eTasks.length) continue;
+
+    const missing = byTNumber([...bucket.decided].filter((x) => !covered.has(x)));
+    if (missing.length) {
+      error(where, `${pf}'s [E2E automation] task does not cover ${missing.join(', ')}, ` +
+        `which a tester assigned to ${frameworks.get(pf)}`);
+    }
+    const overreach = byTNumber([...covered].filter((x) => bucket.manual.has(x)));
+    if (overreach.length) {
+      error(where, `${pf}'s [E2E automation] task covers ${overreach.join(', ')}, which a ` +
+        'tester marked `manual` — generating it overrides a human decision');
+    }
+    const undecided = byTNumber([...covered].filter(
+      (x) => !bucket.decided.has(x) && !bucket.manual.has(x)));
+    if (undecided.length) {
+      error(where, `${pf}'s [E2E automation] task covers ${undecided.join(', ')}, which is ` +
+        'not a Regression row decided for this platform — check the T-numbers');
     }
   }
 }
@@ -602,6 +861,89 @@ function checkAdrs(root) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * "Archived when specified, implemented AND TESTED" — the last word of that is
+ * what this checks.
+ *
+ * A change whose scenarios a tester assigned to a framework, archived with no
+ * run behind them, becomes documentation claiming behaviour nobody verified.
+ * Nothing else notices: the specs merge, the suite gains rows, and the rows
+ * have never run.
+ *
+ * The link between a change and a run is the durable suite id its tests are
+ * named for (`task-filters` + T3 -> TASK-FILTERS-T3), so this looks for that
+ * id in the committed results. That makes it opt-in: a project passes
+ * --results-dir once it commits results, and gets nothing until it does,
+ * rather than a false alarm.
+ */
+function checkArchivedTested(root, resultsDir) {
+  const archiveDir = join(root, 'openspec', 'changes', 'archive');
+  if (!isDir(archiveDir)) return;
+
+  const abs = resolve(root, resultsDir);
+  if (!isDir(abs)) {
+    warn('scripts/apzumi-validate.mjs',
+      `--results-dir "${resultsDir}" is not a directory — nothing to check test evidence against`);
+    return;
+  }
+  const haystack = readTreeText(abs);
+
+  for (const name of listDirs(archiveDir)) {
+    const testsPath = join(archiveDir, name, 'tests.md');
+    if (!existsSync(testsPath)) continue;
+    const where = `changes/archive/${name}/tests.md`;
+    const text = stripComments(readText(testsPath));
+
+    const wanted = [];
+    for (const [cap, body] of Object.entries(sections(text))) {
+      if (!cap || cap === 'Retired scenarios' || cap.startsWith('Notes')) continue;
+      const typeIdx = columnIndex(body, 'Type');
+      const platIdx = columnIndex(body, 'Platforms');
+      const decIdx = columnIndex(body, 'Decision');
+      if (decIdx === -1) continue;
+      const prefix = cap.split('/').pop().toUpperCase().replace(/[^A-Z0-9]+/g, '-');
+      for (const cells of tableRows(body)) {
+        const tid = (cells[0] ?? '').replace(/`/g, '').trim();
+        if (!/^T\d+$/.test(tid)) continue;
+        if (typeIdx !== -1 && cells[typeIdx] !== 'Regression') continue;
+        const rowPlatforms = platIdx !== -1
+          ? (cells[platIdx] ?? '').split(',').map((x) => x.replace(/`/g, '').trim()).filter(Boolean)
+          : [];
+        const parsed = parseDecision(cells[decIdx], rowPlatforms);
+        if (parsed.error) continue;
+        const automated = [...parsed.byPlatform.values()]
+          .some((v) => v !== 'manual' && v !== 'pending');
+        if (automated) wanted.push(`${prefix}-${tid}`);
+      }
+    }
+    if (!wanted.length) continue;
+
+    const seen = wanted.filter((id) => haystack.includes(id));
+    if (!seen.length) {
+      error(where, `archived with ${wanted.length} scenario(s) assigned to a framework ` +
+        `(${byTNumber(wanted.map((x) => x.slice(x.lastIndexOf('-') + 1))).join(', ')}) but no ` +
+        `committed run under ${resultsDir} mentions any of them — a change nobody tested is not ` +
+        'ready to become documentation');
+    }
+  }
+}
+
+/** Every text file under a directory, concatenated. Used to look for ids. */
+function readTreeText(dir) {
+  let out = '';
+  const walk = (d) => {
+    let entries = [];
+    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(xml|json|ya?ml|md|txt|csv)$/i.test(e.name)) out += readText(full);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const quiet = argv.includes('--quiet');
@@ -638,13 +980,20 @@ function main() {
     ? argv[noE2eIdx + 1].split(',').map((x) => x.trim()).filter(Boolean)
     : DEFAULT_NO_E2E_PLATFORMS;
 
+  const resultsIdx = argv.indexOf('--results-dir');
+  const resultsDir = resultsIdx !== -1 ? argv[resultsIdx + 1] : null;
+
   checkReviewGate(root);
   checkChangeTests(root);
+  checkQaDecisions(root);
   checkFigma(root, uiPlatforms);
   checkE2eFirst(root, exemptPlatforms);
   checkLivingSuites(root);
   checkAdrs(root);
-  if (!argv.includes('--no-archive-check')) checkArchivedSync(root);
+  if (!argv.includes('--no-archive-check')) {
+    checkArchivedSync(root);
+    if (resultsDir) checkArchivedTested(root, resultsDir);
+  }
 
   if (!quiet) for (const w of warnings) console.log(`WARN  ${w}`);
   for (const e of errors) console.log(`ERROR ${e}`);
