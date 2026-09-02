@@ -299,19 +299,74 @@ function readPlatforms(root) {
 }
 
 /** Parse '## N. Title' groups and their checkbox tasks. */
+/**
+ * Is this group heading a platform section?
+ *
+ * Only the HEAD of the title counts — what comes before the first dash or
+ * colon, with any "N." numbering stripped. The template says a platform
+ * heading names the platform, so "## 2. Web — acceptance tests" is one and
+ * "## 4. The shared client — one codebase, both UI targets" is not.
+ *
+ * Matching the whole title punished accuracy: a project whose UI platforms
+ * share one codebase writes a genuinely shared group, names both platforms in
+ * the subtitle to say so, and is then told it is missing an E2E task it should
+ * not have. The only recourse was to describe the group less honestly.
+ */
+function platformInHeading(platform, title) {
+  const head = title.replace(/^\s*\d+(?:\.\d+)*\.?\s*/, '').split(/\s+[-\u2013\u2014:]\s+|:/)[0];
+  // Compared as normalised words rather than a constructed pattern: a platform
+  // name is prose from CONVENTIONS.md, and building a regex out of it is an
+  // escaping bug waiting to happen for no benefit.
+  const norm = (s) => ` ${s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+  return norm(head).includes(norm(platform));
+}
+
+/**
+ * Groups and their tasks, with each task's CONTINUATION LINES folded in.
+ *
+ * A task is rarely one line: it carries its acceptance criterion, its
+ * `[req: ...]` tag and, for an E2E task, the rows it covers. Reading only the
+ * checkbox line made every check downstream blind to all of that, and the
+ * failure then surfaced as a complaint about tasks.md rather than about this
+ * parser — the expensive kind of wrong.
+ *
+ * Lines are joined with a newline so the first one stays addressable:
+ * checkE2eCoverage reads the covered T-numbers from it alone.
+ *
+ * A task ends at the next checkbox, the next heading, or a blank line.
+ */
 function taskGroups(text) {
   const groups = [];
   let current = null;
+  let task = null;
+
+  const flush = () => {
+    if (task !== null && current) current.tasks.push(task.join('\n').trim());
+    task = null;
+  };
+
   for (const line of text.split('\n')) {
     const h = /^##\s+(.*?)\s*$/.exec(line);
     if (h && !line.startsWith('###')) {
+      flush();
       current = { title: h[1], tasks: [] };
       groups.push(current);
       continue;
     }
     const t = /^\s*-\s*\[[ xX]\]\s*(.+?)\s*$/.exec(line);
-    if (t && current) current.tasks.push(t[1]);
+    if (t) {
+      flush();
+      if (current) task = [t[1]];
+      continue;
+    }
+    // Indented, non-blank, not a new list item: a continuation of the task above.
+    if (task !== null && /^\s+\S/.test(line) && !/^\s*[-*+]\s/.test(line)) {
+      task.push(line.trim());
+      continue;
+    }
+    flush();
   }
+  flush();
   return groups;
 }
 
@@ -519,8 +574,7 @@ function checkE2eFirst(root, exemptPlatforms) {
       // service" would otherwise be swallowed and never checked.
       const looksLayer2 = /white-box/i.test(g.title)
         || (/\bunit\b/i.test(g.title) && /\bintegration\b/i.test(g.title));
-      const platform = platforms.find((pf) =>
-        new RegExp(`\\b${pf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(g.title));
+      const platform = platforms.find((pf) => platformInHeading(pf, g.title));
 
       if (looksLayer2 || !platform) {
         const isLayer2 = looksLayer2
@@ -604,11 +658,17 @@ function checkE2eCoverage(root, name, changeDir, groups, platforms) {
   if (!perPlatform.size) return;
 
   for (const [pf, bucket] of perPlatform) {
-    const group = groups.find((g) =>
-      new RegExp(`\\b${pf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(g.title));
+    const group = groups.find((g) => platformInHeading(pf, g.title));
     const e2eTasks = group ? group.tasks.filter((x) => E2E_LABEL.test(x)) : [];
     const covered = new Set();
-    for (const task of e2eTasks) for (const m of task.matchAll(/\bT\d+\b/g)) covered.add(m[0]);
+    // Only a task's FIRST line names what it covers. The prose below is free to
+    // say which rows it deliberately does NOT generate — and a task that explains
+    // its omissions beats one that leaves them looking like an oversight, so those
+    // must not be counted as coverage.
+    for (const task of e2eTasks) {
+      const head = task.split('\n')[0];
+      for (const m of head.matchAll(/\bT\d+\b/g)) covered.add(m[0]);
+    }
 
     if (bucket.decided.size && !e2eTasks.length) {
       error(where, `${byTNumber(bucket.decided).join(', ')} were assigned to ` +
@@ -632,7 +692,8 @@ function checkE2eCoverage(root, name, changeDir, groups, platforms) {
       (x) => !bucket.decided.has(x) && !bucket.manual.has(x)));
     if (undecided.length) {
       error(where, `${pf}'s [E2E automation] task covers ${undecided.join(', ')}, which is ` +
-        'not a Regression row decided for this platform — check the T-numbers');
+        'not a Regression row decided for this platform — check the T-numbers on ' +
+        "the task's first line, which is where coverage is read from");
     }
   }
 }
