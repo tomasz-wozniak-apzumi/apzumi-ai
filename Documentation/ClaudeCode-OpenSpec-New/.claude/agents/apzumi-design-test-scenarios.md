@@ -176,6 +176,15 @@ defect it would catch.
 automated one, because the flaky one also damages trust in every test around
 it.
 
+**One feasibility case worth naming**, because it looks automatable and is
+not: a row asserting that *two platforms agree* — same order, same wording,
+same result — cannot be one automated test when each platform runs under its
+own framework, in its own run, with no shared artifact between them. The row is
+often valuable (cross-engine differences are real defects), but the approach is
+open: either each platform asserts against one agreed recorded expectation, or
+it stays a manual cross-check. Recommend `needs_human_decision` and say which
+of the two you would pick.
+
 **`needs_human_decision`** when the row is worth running but feasibility or
 approach is genuinely open — no stable identifier yet, data that cannot be
 seeded, an outcome only visible through an external system, or a framework
