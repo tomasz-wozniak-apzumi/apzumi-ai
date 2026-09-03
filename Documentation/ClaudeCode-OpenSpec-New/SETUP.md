@@ -68,8 +68,30 @@ does not exist, this is why: they are on the `core` profile.
 - [ ] Fill `openspec/CONVENTIONS.md`, section by section: the Platform
       Architecture table, the Capability Map, Terminology, Connected
       Implementation Repositories (submodules/paths, non-default working
-      branches), Backend API Reference, and Figma. Delete sections that do not
-      apply.
+      branches), **Test Automation**, **Identifier Policy**, Backend API
+      Reference, and Figma. Delete sections that do not apply.
+- [ ] In `openspec/CONVENTIONS.md` → `## Test Automation`, fill the
+      platform → framework → test root table. This is not documentation:
+      `@apzumi-generate-test-code` reads it to decide which framework generates
+      a row and into which directory, and its instructions say that table is the
+      project's answer. An unfilled table leaves the generator guessing at the
+      one thing it must not guess.
+- [ ] In `openspec/CONVENTIONS.md` → `## Identifier Policy`, choose `owned` or
+      `legacy` **deliberately**. It decides what happens when a test cannot
+      address a control, which is the most common thing that goes wrong.
+
+      `owned` — you can change the product, so a control with no stable
+      identifier is a defect: the generator stops and someone adds the
+      identifier. This is what makes the flow improve the product rather than
+      work around it.
+
+      `legacy` — you cannot, or not on this timescale, so a stop would mean no
+      test at all. The generator falls back down the ladder and records the debt.
+
+      Pick `legacy` only for a third-party or frozen application, never to avoid
+      a conversation about identifiers. The debt mechanism exists because that
+      is the failure mode: the checker fails a fallback with no owner, so the
+      cost of choosing it shows up as a list that grows rather than as silence.
 - [ ] In `openspec/CONVENTIONS.md` → `## Capability Map`, name 4-8 coarse
       domains with a one-line scope each. This matters most on a greenfield
       project: with `openspec/specs/` empty it is the only capability taxonomy

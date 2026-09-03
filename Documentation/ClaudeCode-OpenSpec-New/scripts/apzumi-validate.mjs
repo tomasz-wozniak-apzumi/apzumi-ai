@@ -794,7 +794,16 @@ function byTNumber(ids) {
  */
 function checkE2eCoverage(root, name, changeDir, groups, platforms) {
   const frameworks = readFrameworks(root);
-  if (!frameworks.size || !platforms.length) return;
+  if (!frameworks.size || !platforms.length) {
+    // Silence here would be the worst outcome: an unfilled Test Automation
+    // table means every check below this line quietly does nothing, and the
+    // run still reports OK. Say so once, rather than passing a project whose
+    // decisions about automation were never cross-checked at all.
+    warn('openspec/CONVENTIONS.md', 'Test Automation names no platform/framework pair, ' +
+      'so the E2E coverage cross-check cannot run — a tester could assign a row to a ' +
+      'framework and nothing would notice that no task generates it. See SETUP.md');
+    return;
+  }
 
   const where = `changes/${name}/tasks.md`;
   const testsText = stripComments(readText(join(changeDir, 'tests.md')));
