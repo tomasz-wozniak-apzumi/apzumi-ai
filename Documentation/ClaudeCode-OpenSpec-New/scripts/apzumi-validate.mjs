@@ -532,6 +532,78 @@ function checkQaDecisions(root) {
 
 const E2E_LABEL = /\[E2E automation\]/;
 
+/**
+ * Every `[req: ...]` tag names a requirement that actually exists.
+ *
+ * The tag is the only traceability link a task or a scenario carries back to
+ * the specification, and nothing verified it: a misremembered or invented
+ * requirement name passed both validators silently, and the row looked
+ * traceable while pointing at nothing. Found the hard way — a tasks.md shipped
+ * with `[req: Language options are individually addressable]`, a requirement
+ * that has never existed under any capability.
+ *
+ * A name resolves if it heads a requirement in this change's own delta specs OR
+ * anywhere under openspec/specs/. Both are legitimate: a task may serve a
+ * requirement the change modifies, or one it merely relies on.
+ *
+ * `[req: —]` is exempt. It is the deliberate marker for a scenario nobody's
+ * specification asked for — an extrapolation a tester has to judge on its own
+ * merits — and the whole point is that it names no requirement.
+ */
+function checkReqTags(root) {
+  const changesDir = join(root, 'openspec', 'changes');
+  for (const name of listDirs(changesDir)) {
+    if (name === 'archive') continue;
+    checkReqTagsFor(root, name, join(changesDir, name));
+  }
+}
+
+function checkReqTagsFor(root, name, changeDir) {
+  const known = new Set();
+  const collect = (file) => {
+    for (const m of readText(file).matchAll(/^###\s+Requirement:\s*(.+?)\s*$/gm)) {
+      known.add(m[1]);
+    }
+  };
+  for (const f of mdFilesUnder(join(root, 'openspec', 'specs'))) collect(f);
+  for (const f of mdFilesUnder(join(changeDir, 'specs'))) collect(f);
+  // A change with no requirement anywhere cannot have its tags checked; a
+  // skip_specs change is the ordinary case and must not be flagged.
+  if (!known.size) return;
+
+  for (const artifact of ['tasks.md', 'tests.md']) {
+    const file = join(changeDir, artifact);
+    if (!existsSync(file)) continue;
+    const where = `changes/${name}/${artifact}`;
+    const seen = new Set();
+    for (const m of stripComments(readText(file)).matchAll(/\[req:\s*([^\]]+?)\s*\]/g)) {
+      const req = m[1];
+      if (req === '—' || req === '-' || seen.has(req)) continue;
+      seen.add(req);
+      if (!known.has(req)) {
+        error(where, `[req: ${req}] names no requirement in this change's deltas ` +
+          'or in openspec/specs/ — a traceability tag that resolves to nothing is ' +
+          'worse than none, because it reads as checked');
+      }
+    }
+  }
+}
+
+/** Every .md under a directory, recursively; [] when it does not exist. */
+function mdFilesUnder(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  const walk = (d) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name.endsWith('.md')) out.push(p);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
 function checkE2eFirst(root, exemptPlatforms) {
   const changesDir = join(root, 'openspec', 'changes');
   const platforms = readPlatforms(root);
@@ -1052,6 +1124,7 @@ function main() {
   checkQaDecisions(root);
   checkFigma(root, uiPlatforms);
   checkE2eFirst(root, exemptPlatforms);
+  checkReqTags(root);
   checkLivingSuites(root);
   checkAdrs(root);
   if (!argv.includes('--no-archive-check')) {
