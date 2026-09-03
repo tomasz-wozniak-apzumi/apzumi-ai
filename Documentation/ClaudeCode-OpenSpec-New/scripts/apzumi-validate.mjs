@@ -533,6 +533,104 @@ function checkQaDecisions(root) {
 const E2E_LABEL = /\[E2E automation\]/;
 
 /**
+ * A locator fallback is recorded where somebody will see it, or it is an error.
+ *
+ * `openspec/CONVENTIONS.md` § Identifier Policy puts a project in one of two
+ * worlds. Under `owned` a control with no stable identifier is a defect and the
+ * generator stops; under `legacy` it falls back down the ladder and marks the
+ * locator `@locator-fallback`.
+ *
+ * This check is what stops `legacy` becoming a quiet slide. A marker with no
+ * matching row under a change's `## Identifier Debt` is a fallback nobody owns,
+ * and a marker under `owned` is a policy the project only claims to have. Both
+ * fail, because the failure mode they guard against is invisible: six months of
+ * fallbacks accrete, every test still passes, and nothing records when the suite
+ * stopped being able to survive a copy edit.
+ */
+function checkLocatorDebt(root) {
+  const conv = join(root, 'openspec', 'CONVENTIONS.md');
+  if (!existsSync(conv)) return;
+  const policyMatch = /\*\*`?policy:\s*(owned|legacy)`?\*\*/i.exec(readText(conv));
+  const policy = policyMatch ? policyMatch[1].toLowerCase() : 'owned';
+
+  // Collect every marker in every configured test root.
+  const roots = testRootsFromAutomationConfig(root);
+  const markers = [];
+  for (const rel of roots) {
+    for (const file of filesUnder(join(root, rel))) {
+      const text = readText(file);
+      for (const m of text.matchAll(/@locator-fallback\s+([^\n]+)/g)) {
+        markers.push({ file, detail: m[1].trim() });
+      }
+    }
+  }
+  if (!markers.length) return;
+
+  if (policy === 'owned') {
+    for (const { file, detail } of markers) {
+      error(relPath(root, file), `@locator-fallback "${detail}" under policy: owned — ` +
+        'that policy says a control without a stable identifier is a defect to fix, ' +
+        'not one to route around. Add the identifier, or change the policy deliberately');
+    }
+    return;
+  }
+
+  // legacy: every marker needs an owner somewhere in an active change's debt table.
+  const debt = [];
+  const changesDir = join(root, 'openspec', 'changes');
+  for (const name of listDirs(changesDir)) {
+    if (name === 'archive') continue;
+    const design = join(changesDir, name, 'design.md');
+    if (!existsSync(design)) continue;
+    const body = sections(stripComments(readText(design)))['Identifier Debt'];
+    if (body) debt.push(body);
+  }
+  const recorded = debt.join('\n');
+
+  for (const { file, detail } of markers) {
+    // The element is the first segment of "<element> — <rung> — <why>".
+    const element = detail.split(/\s+[-–—]\s+/)[0].trim();
+    if (!element || !recorded.includes(element)) {
+      error(relPath(root, file), `@locator-fallback "${detail}" has no row under ` +
+        "any active change's ## Identifier Debt — a fallback recorded only in a " +
+        'code comment reaches nobody, which is the whole reason the marker exists');
+    }
+  }
+}
+
+/** Test roots named by .qa-automation/config.yaml, or a sensible default. */
+function testRootsFromAutomationConfig(root) {
+  const cfg = join(root, '.qa-automation', 'config.yaml');
+  const found = new Set();
+  if (existsSync(cfg)) {
+    for (const m of readText(cfg).matchAll(/^\s*(?:test_root|root):\s*["']?([^"'\n]+)["']?\s*$/gm)) {
+      found.add(m[1].trim());
+    }
+  }
+  if (!found.size) found.add('qa/automation');
+  return [...found];
+}
+
+function filesUnder(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  const walk = (d) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const p = join(d, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else out.push(p);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+function relPath(root, file) {
+  return file.slice(root.length + 1).split('\\').join('/');
+}
+
+/**
  * Every `[req: ...]` tag names a requirement that actually exists.
  *
  * The tag is the only traceability link a task or a scenario carries back to
@@ -1125,6 +1223,7 @@ function main() {
   checkFigma(root, uiPlatforms);
   checkE2eFirst(root, exemptPlatforms);
   checkReqTags(root);
+  checkLocatorDebt(root);
   checkLivingSuites(root);
   checkAdrs(root);
   if (!argv.includes('--no-archive-check')) {

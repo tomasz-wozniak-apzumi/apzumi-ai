@@ -134,6 +134,59 @@ expiring CI artifact cannot answer "was this tested, and when".
 
 ---
 
+## Identifier Policy
+
+**`policy: owned`**
+
+<!-- One of two values. This is the single most consequential line in this file
+     for how the flow behaves when a test cannot address a control, so choose it
+     deliberately rather than leaving the default.
+
+     owned  — we can change the product. A control with no stable identifier is
+              a DEFECT: the generator stops and reports it, and somebody adds
+              the identifier. This is the right setting for a product the team
+              owns, and it is what makes the flow improve the product instead of
+              working around it.
+
+     legacy — we cannot change the product, or not on this timescale. The
+              generator falls back down the ladder below and records the debt.
+              Choose this for a third-party or frozen application, never as a
+              way to avoid a conversation about identifiers. -->
+
+### The fallback ladder
+
+Only under `policy: legacy`. Each rung costs something, and the cost is stated
+so nobody picks one without knowing:
+
+| Rung | When | What you lose |
+|---|---|---|
+| the identifier contract | always preferred | — |
+| role + accessible name | no id, but the semantics are there | breaks on a language switch |
+| visible text | last resort | breaks on a copy edit **and** on a language switch |
+| **no sound rung** | — | **still a blocker** |
+
+The last row is the important one. Some things no fallback reaches: whether a
+chip is *selected* cannot be read from its label, and neither can the order of a
+list. A missing identifier there is a blocker under either policy, and saying so
+is the honest answer.
+
+### Recording the debt
+
+A fallback that only lives in a code comment reaches nobody. Every fallback
+locator carries the marker
+
+```
+@locator-fallback <element> — <rung> — <why no identifier>
+```
+
+and the change's `design.md` carries a matching row under `## Identifier Debt`,
+with an owner. The conventions checker fails the build when a marker has no row,
+and when a marker appears at all under `policy: owned`.
+
+The point is not paperwork. It is that a team which flips this switch to avoid a
+conversation ends up with a list that grows in front of them, rather than with
+silence.
+
 ## Backend API Reference
 
 <!-- Where the authoritative API contract lives and when to read it. Delete

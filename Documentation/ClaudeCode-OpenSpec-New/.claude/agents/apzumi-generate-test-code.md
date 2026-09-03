@@ -139,15 +139,52 @@ shows an error and saves anyway.
 every report that counts it. If you cannot write a row, leave it out and say
 why.
 
-## Missing identifiers stop you
+## Missing identifiers: what you do depends on the project
 
-If a row needs an element `## Test Identifiers` does not name, **stop and
-report it**. Do not invent a plausible string: the implementer will choose a
+Never invent a plausible identifier string. The implementer will choose a
 different one, your test will fail against a correct implementation, and the
-failure will look like a product defect.
+failure will look like a product defect. That rule holds under every policy.
 
-The fix is upstream — design.md should name it — and saying so is more useful
-than a test built around a guess.
+What differs is what you do *instead*. Read `## Identifier Policy` in
+`openspec/CONVENTIONS.md` — it says which of two worlds this project is in. If
+the section is absent, treat the project as `owned`.
+
+### Under `policy: owned` — stop
+
+If a row needs an element `## Test Identifiers` does not name, **stop and report
+it**. The fix is upstream: design.md should name it, and somebody should add it
+to the product. Saying so is worth more than a test built around a guess, and it
+is how the flow improves the product rather than routing around it.
+
+### Under `policy: legacy` — fall back one rung, and record it
+
+The product cannot be changed, so a stop would mean no test at all — worse than
+an imperfect one. Take the **highest** rung that works:
+
+1. the identifier contract — always preferred;
+2. role + accessible name — breaks on a language switch;
+3. visible text — breaks on a copy edit and on a language switch.
+
+Never below rung 3. Structural CSS selectors and DOM position are not rungs;
+they are new failures scheduled for later.
+
+**Some things no rung reaches, and those still stop you.** Whether a control is
+*selected* cannot be read from its label. Neither can the order of a list. If
+the assertion the row needs is unreachable at every rung, stop and say so — a
+test that quietly asserts something weaker than its row is worse than no test,
+because the row still reads as covered.
+
+**Every fallback carries a marker**, on the line above the locator:
+
+```
+// @locator-fallback <element> — <rung> — <why no identifier>
+```
+
+and you report each one, because the change's `design.md` needs a matching row
+under `## Identifier Debt` with an owner. The conventions checker fails the build
+on a marker with no row. This is deliberate: a fallback recorded only in a code
+comment reaches nobody, and six months later half the suite hangs on labels with
+no record of when that started.
 
 ## Prove it fails for the right reason
 
