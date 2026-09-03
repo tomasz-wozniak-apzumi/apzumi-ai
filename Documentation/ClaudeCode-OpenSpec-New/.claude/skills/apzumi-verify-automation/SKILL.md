@@ -58,6 +58,25 @@ comment on the repair door, the test's own code, the identifier contract, and
 the last committed result. Not the product code — the workspace does not have
 it.
 
+**2b — Run where the tests actually live, not where you happen to be.**
+Take the runner from the project's Test Automation table. For a mobile platform
+that usually means a hosted device farm rather than a phone on someone's desk:
+"automated" means nobody has to be present, and a local run quietly assumes
+somebody is. A local device stays a legitimate way to *iterate* on a flow, and
+a project may declare it optional — but a repair is only confirmed where the
+test really runs.
+
+Two consequences worth stating, because both cost real money or real trust:
+
+- **Verify with one short flow, not the whole pack.** A device farm bills for
+  what it runs, and a repair needs one flow to be conclusive. Check the
+  workflow's cheapest gear first — a credentials-only mode costs nothing and
+  fails in seconds if the account is wrong, which is worth more than a build
+  that runs for forty minutes and then cannot connect.
+- **Say which target produced the result.** "Passed" from a developer's laptop
+  and "passed" on the farm are different claims. The report names the runner,
+  and so does the committed result.
+
 **3 — Preflight, before any run.** Take the prerequisites from the project's
 automation config; every framework has some. A missing prerequisite is
 `environment_failure`: nothing was tested, and no amount of locator work
