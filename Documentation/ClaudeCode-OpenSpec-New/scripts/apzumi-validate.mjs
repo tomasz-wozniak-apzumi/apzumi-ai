@@ -1223,8 +1223,15 @@ function main() {
     ? argv[noE2eIdx + 1].split(',').map((x) => x.trim()).filter(Boolean)
     : DEFAULT_NO_E2E_PLATFORMS;
 
+  // Default to qa/results when it exists, rather than requiring the flag.
+  // CI passed --results-dir and a developer's bare run did not, so the archive
+  // evidence check ran in one place and silently skipped in the other — two
+  // changes were archived with no committed run and only GitHub noticed. A
+  // check that answers differently depending on how it was invoked is the
+  // failure mode this file exists to catch, so it should not have it itself.
   const resultsIdx = argv.indexOf('--results-dir');
-  const resultsDir = resultsIdx !== -1 ? argv[resultsIdx + 1] : null;
+  const defaultResults = existsSync(join(root, 'qa', 'results')) ? 'qa/results' : null;
+  const resultsDir = resultsIdx !== -1 ? argv[resultsIdx + 1] : defaultResults;
 
   checkReviewGate(root);
   checkChangeTests(root);
