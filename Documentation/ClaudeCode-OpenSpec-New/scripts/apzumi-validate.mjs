@@ -533,6 +533,65 @@ function checkQaDecisions(root) {
 const E2E_LABEL = /\[E2E automation\]/;
 
 /**
+ * A change that edits the identifier contract also regenerates its snapshot.
+ *
+ * The snapshot is a derived file that has to be committed, because the healer
+ * runs from a sparse worktree where the contract's source directory does not
+ * exist on disk — the snapshot is its only view of which identifiers are real.
+ * So an id added to the contract and missing from the snapshot is invisible to
+ * the one component that most needs it.
+ *
+ * CI already catches a stale snapshot, by regenerating and diffing. This check
+ * exists to catch it EARLIER and somewhere more useful: `tasks.md` is generated
+ * from `## Modules & Files`, so a snapshot named there becomes a task the
+ * implementer is handed, instead of a red pull request they have to interpret.
+ *
+ * Deliberately NOT solved by regenerating the file automatically. The contract's
+ * own header calls any change to it "a CONTRACT change requiring QA review …
+ * never bundle it silently", and a hook or a CI auto-commit would quietly
+ * complete exactly the change that is supposed to be noticed.
+ */
+function checkContractSnapshot(root) {
+  const cfgPath = join(root, 'qa', 'qa.config.json');
+  if (!existsSync(cfgPath)) return;
+  let source;
+  try {
+    source = JSON.parse(readText(cfgPath))?.testIds?.source;
+  } catch {
+    return; // malformed config is another check's problem
+  }
+  if (!source) return;
+
+  const contractFile = source.split('/').pop();
+  const snapshotFile = 'test-ids.snapshot.json';
+
+  const changesDir = join(root, 'openspec', 'changes');
+  for (const name of listDirs(changesDir)) {
+    if (name === 'archive') continue;
+    const design = join(changesDir, name, 'design.md');
+    if (!existsSync(design)) continue;
+    const text = stripComments(readText(design));
+    const modules = sections(text)['Modules & Files'];
+    if (!modules) continue;
+
+    // Only lines that claim to change the contract count. A design may name the
+    // file to say it is deliberately left alone, and that is not a defect.
+    const touches = modules.split('\n').some((line) => {
+      if (!line.includes(contractFile)) return false;
+      return !/\bnot\b|\bunchanged\b|\bdeliberately\b|\buntouched\b|\bno change\b/i.test(line);
+    });
+    if (!touches) continue;
+    if (text.includes(snapshotFile)) continue;
+
+    error(`changes/${name}/design.md`,
+      `Modules & Files edits ${contractFile} but never mentions ${snapshotFile} — ` +
+      'the snapshot is the healer\'s only view of the contract (its worktree has no ' +
+      'source directory), and tasks.md is generated from this list, so nobody will be ' +
+      'asked to regenerate it and the pull request fails on a stale snapshot');
+  }
+}
+
+/**
  * A locator fallback is recorded where somebody will see it, or it is an error.
  *
  * `openspec/CONVENTIONS.md` § Identifier Policy puts a project in one of two
@@ -1240,6 +1299,7 @@ function main() {
   checkE2eFirst(root, exemptPlatforms);
   checkReqTags(root);
   checkLocatorDebt(root);
+  checkContractSnapshot(root);
   checkLivingSuites(root);
   checkAdrs(root);
   if (!argv.includes('--no-archive-check')) {
